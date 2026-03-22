@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { request } from '#shared/utils/request';
-import { getCookieFromResponse, getCookiesFromRequest } from '~/server/utils/CookieStore';
+import { cookieStore, getCookieFromResponse, getCookiesFromRequest } from '~/server/utils/CookieStore';
 import { proxyMpRequest } from '~/server/utils/proxy-request';
 
 export default defineEventHandler(async event => {
@@ -50,10 +50,16 @@ export default defineEventHandler(async event => {
     };
   }
 
+  // 从 CookieStore 中获取 token
+  const accountCookie = await cookieStore.getAccountCookie(authKey);
+  const token = accountCookie?.token || '';
+
   const body = JSON.stringify({
     nickname: nick_name,
     avatar: head_img,
     expires: dayjs().add(4, 'days').toString(),
+    authKey: authKey,
+    token: token,
   });
   const headers = new Headers(response.headers);
   headers.set('Content-Length', new TextEncoder().encode(body).length.toString());

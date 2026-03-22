@@ -7,6 +7,7 @@ export type CookieEntity = Record<string, string | number>;
 // 公众号所有的 set-cookie 解析结果
 export class AccountCookie {
   private readonly _token: string;
+  private _authKey: string;
   private _cookie: CookieEntity[];
 
   /**
@@ -15,6 +16,7 @@ export class AccountCookie {
    */
   constructor(token: string, cookies: string[]) {
     this._token = token;
+    this._authKey = '';
     this._cookie = AccountCookie.parse(cookies);
   }
 
@@ -28,9 +30,14 @@ export class AccountCookie {
     return this.stringify(this._cookie);
   }
 
+  public setAuthKey(authKey: string): void {
+    this._authKey = authKey;
+  }
+
   public toJSON(): CookieKVValue {
     return {
       token: this._token,
+      authKey: this._authKey,
       cookies: this._cookie,
     };
   }
@@ -160,6 +167,7 @@ class CookieStore {
    */
   async setCookie(authKey: string, token: string, cookie: string[]): Promise<boolean> {
     const accountCookie = new AccountCookie(token, cookie);
+    accountCookie.setAuthKey(authKey);
     // 如果已存在则先删除（保证 LRU 顺序正确）
     this.store.delete(authKey);
     this.evictIfNeeded();

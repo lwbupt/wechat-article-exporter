@@ -23,6 +23,12 @@ LicenseManager.setLicenseKey(runtimeConfig.public.aggridLicense);
 if (!isChromeBrowser()) {
   alert('为了更好的用户体验，推荐使用 Chrome 浏览器。');
 }
+
+// 自动检查并恢复登录状态
+onMounted(async () => {
+  const autoLogin = useAutoLoginCheck();
+  await autoLogin.checkAndRestoreLogin();
+});
 </script>
 
 <style>

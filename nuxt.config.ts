@@ -38,8 +38,9 @@ export default defineNuxtConfig({
     minify: process.env.NODE_ENV === 'production',
     storage: {
       kv: {
-        driver: process.env.NITRO_KV_DRIVER || 'memory',
-        base: process.env.NITRO_KV_BASE,
+        // 开发环境使用文件存储，避免重启丢失登录状态
+        driver: process.env.NITRO_KV_DRIVER || 'fs',
+        base: process.env.NITRO_KV_BASE || './data/kv',
       },
     },
   },

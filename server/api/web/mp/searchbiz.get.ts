@@ -3,6 +3,7 @@
  */
 
 import { getTokenFromStore } from '~/server/utils/CookieStore';
+import { syncAccount } from '~/server/utils/db-sync';
 import { proxyMpRequest } from '~/server/utils/proxy-request';
 
 interface SearchBizQuery {
@@ -33,7 +34,7 @@ export default defineEventHandler(async event => {
     ajax: '1',
   };
 
-  return proxyMpRequest({
+  const response = await proxyMpRequest({
     event: event,
     method: 'GET',
     endpoint: 'https://mp.weixin.qq.com/cgi-bin/searchbiz',
@@ -47,4 +48,23 @@ export default defineEventHandler(async event => {
       },
     };
   });
+
+  // 同步公众号数据到数据库
+  if (response && response.list && response.list.length > 0) {
+    try {
+      for (const account of response.list) {
+        syncAccount({
+          fakeid: account.fakeid,
+          nickname: account.nickname,
+          round_head_img: account.round_head_img,
+          signature: account.signature,
+          service_type: account.service_type,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to sync accounts to database:', error);
+    }
+  }
+
+  return response;
 });

@@ -3,6 +3,10 @@ export interface LoginAccount {
   avatar: string;
   expires: string;
   err?: string;
+  // 登录成功后返回的 authKey，用于后续请求认证
+  authKey?: string;
+  // 微信公众平台 token
+  token?: string;
 }
 
 export interface BaseResp {

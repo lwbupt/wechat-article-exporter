@@ -1,82 +1,74 @@
+/**
+ * 文章数据管理
+ * 数据源：后端 SQLite 数据库
+ */
+
 import type { AppMsgExWithFakeID, PublishInfo, PublishPage } from '~/types/types';
-import { db } from './db';
 import { type MpAccount, updateInfoCache } from './info';
 
 export type ArticleAsset = AppMsgExWithFakeID;
 
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  pagination?: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+}
+
 /**
- * 更新文章缓存
+ * 更新文章缓存（由后端自动处理）
  * @param account
  * @param publish_page
+ * @deprecated 数据由后端自动同步
  */
-export async function updateArticleCache(account: MpAccount, publish_page: PublishPage) {
-  await db.transaction('rw', ['article', 'info'], async () => {
-    const keys = await db.article.toCollection().keys();
-
-    const fakeid = account.fakeid;
-    const total_count = publish_page.total_count;
-    const publish_list = publish_page.publish_list.filter(item => !!item.publish_info);
-
-    // 统计本次缓存成功新增的数量
-    let msgCount = 0;
-    let articleCount = 0;
-
-    for (const item of publish_list) {
-      const publish_info: PublishInfo = JSON.parse(item.publish_info);
-      let newEntryCount = 0;
-
-      for (const article of publish_info.appmsgex) {
-        const key = await db.article.put({ ...article, fakeid, _status: '' }, `${fakeid}:${article.aid}`);
-        if (!keys.includes(key)) {
-          newEntryCount++;
-          articleCount++;
-        }
-      }
-
-      if (newEntryCount > 0) {
-        // 新增成功
-        msgCount++;
-      }
-    }
-
-    await updateInfoCache({
-      fakeid: fakeid,
-      completed: publish_list.length === 0,
-      count: msgCount,
-      articles: articleCount,
-      nickname: account.nickname,
-      round_head_img: account.round_head_img,
-      total_count: total_count,
-    });
-  });
+export async function updateArticleCache(_account: MpAccount, _publish_page: PublishPage) {
+  // 数据由后端 API 自动同步，这里保留空实现以保持兼容性
+  // 后端在 /api/web/mp/appmsgpublish 中自动写入数据库
 }
 
 /**
  * 检查是否存在指定时间之前的缓存
  * @param fakeid 公众号id
  * @param create_time 创建时间
+ * @deprecated 从后端查询，不再使用缓存检查
  */
 export async function hitCache(fakeid: string, create_time: number): Promise<boolean> {
-  const count = await db.article
-    .where('fakeid')
-    .equals(fakeid)
-    .and(article => article.create_time < create_time)
-    .count();
-  return count > 0;
+  try {
+    const response = await $fetch<ApiResponse<any[]>>(`/api/query/articles?fakeid=${fakeid}&limit=1`);
+    if (response?.success && response.pagination) {
+      return response.pagination.total > 0;
+    }
+    return false;
+  } catch (error) {
+    console.error('Failed to check cache:', error);
+    return false;
+  }
 }
 
 /**
- * 读取缓存中的指定时间之前的历史文章
+ * 从后端获取文章列表
  * @param fakeid 公众号id
  * @param create_time 创建时间
  */
 export async function getArticleCache(fakeid: string, create_time: number): Promise<AppMsgExWithFakeID[]> {
-  return db.article
-    .where('fakeid')
-    .equals(fakeid)
-    .and(article => article.create_time < create_time)
-    .reverse()
-    .sortBy('create_time');
+  try {
+    const response = await $fetch<ApiResponse<any[]>>(
+      `/api/query/articles?fakeid=${fakeid}&limit=1000&sortBy=datetime&sortOrder=desc`
+    );
+    if (response?.success && response.data) {
+      // 过滤出指定时间之前的文章
+      return response.data.filter(article => article.create_time < create_time);
+    }
+    return [];
+  } catch (error) {
+    console.error('Failed to fetch articles from backend:', error);
+    return [];
+  }
 }
 
 /**
@@ -84,75 +76,72 @@ export async function getArticleCache(fakeid: string, create_time: number): Prom
  * @param url
  */
 export async function getArticleByLink(url: string): Promise<AppMsgExWithFakeID> {
-  const article = await db.article.where('link').equals(url).first();
-  if (!article) {
+  try {
+    // 需要先根据 link 查询文章，然后获取 fakeid 和 aid
+    const response = await $fetch<ApiResponse<any[]>>(`/api/query/articles`);
+    if (response?.success && response.data) {
+      const article = response.data.find(a => a.link === url);
+      if (article) {
+        return article;
+      }
+    }
+    throw new Error(`Article(${url}) does not exist`);
+  } catch (error) {
+    console.error('Failed to fetch article by link:', error);
     throw new Error(`Article(${url}) does not exist`);
   }
-  return article;
-}
-
-// 根据 url 获取 SINGLE_ARTICLE_FAKEID 文章对象
-export async function getSingleArticleByLink(url: string): Promise<AppMsgExWithFakeID> {
-  const article = await db.article
-    .where('link')
-    .equals(url)
-    .and(article => article.fakeid === 'SINGLE_ARTICLE_FAKEID')
-    .first();
-  if (!article) {
-    throw new Error(`Article(${url}) does not exist`);
-  }
-
-  return article;
 }
 
 /**
- * 文章被删除
+ * 根据 url 获取单篇文章对象
+ * @param url
+ */
+export async function getSingleArticleByLink(url: string): Promise<AppMsgExWithFakeID> {
+  // 单篇文章的 fakeid 为 'SINGLE_ARTICLE_FAKEID'
+  try {
+    const response = await $fetch<ApiResponse<any[]>>(`/api/query/articles`);
+    if (response?.success && response.data) {
+      const article = response.data.find(a => a.link === url && a.fakeid === 'SINGLE_ARTICLE_FAKEID');
+      if (article) {
+        return article;
+      }
+    }
+    throw new Error(`Article(${url}) does not exist`);
+  } catch (error) {
+    console.error('Failed to fetch single article by link:', error);
+    throw new Error(`Article(${url}) does not exist`);
+  }
+}
+
+/**
+ * 文章删除状态更新
  * @param url
  * @param is_deleted
+ * @deprecated 需要后端支持
  */
 export async function articleDeleted(url: string, is_deleted = true): Promise<void> {
-  await db.transaction('rw', 'article', async () => {
-    await db.article
-      .where('link')
-      .equals(url)
-      .modify(article => {
-        article.is_deleted = is_deleted;
-      });
-  });
+  // TODO: 需要后端添加删除/更新 API
+  console.warn('articleDeleted: backend API not implemented yet', url, is_deleted);
 }
 
 /**
  * 更新文章状态
  * @param url
  * @param status
+ * @deprecated 需要后端支持
  */
 export async function updateArticleStatus(url: string, status: string): Promise<void> {
-  await db.transaction('rw', 'article', async () => {
-    await db.article
-      .where('link')
-      .equals(url)
-      .modify(article => {
-        article._status = status;
-      });
-  });
+  // TODO: 需要后端添加更新 API
+  console.warn('updateArticleStatus: backend API not implemented yet', url, status);
 }
 
 /**
- * 更新文章的fakeid
+ * 更新文章的 fakeid
  * @param url
  * @param fakeid
+ * @deprecated 需要后端支持
  */
 export async function updateArticleFakeid(url: string, fakeid: string): Promise<void> {
-  await db.transaction('rw', 'article', async () => {
-    await db.article
-      .where('link')
-      .equals(url)
-      .and(article => article.fakeid === 'SINGLE_ARTICLE_FAKEID')
-      .modify(article => {
-        article.fakeid = fakeid;
-
-        // 标记改数据是【单篇文章下载】添加的
-        article._single = true;
-      });
-  });
+  // TODO: 需要后端添加更新 API
+  console.warn('updateArticleFakeid: backend API not implemented yet', url, fakeid);
 }

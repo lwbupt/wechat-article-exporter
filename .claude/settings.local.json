@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git remote add:*)",
+      "Bash(git fetch:*)",
+      "Bash(git config:*)",
+      "Bash(git checkout:*)",
+      "Bash(node:*)",
+      "Bash(corepack enable:*)",
+      "Bash(corepack prepare:*)",
+      "Bash(yarn --version:*)",
+      "Bash(npm install:*)",
+      "Bash(yarn install:*)",
+      "Bash(yarn config set:*)",
+      "Bash(yarn cache clean:*)",
+      "Bash(yarn config:*)",
+      "Bash(npm config set:*)",
+      "Bash(npm config list:*)",
+      "Bash(npm config get:*)",
+      "Bash(dir:*)",
+      "Bash(npm run dev:*)",
+      "Bash(sqlite3:*)",
+      "Bash(curl:*)",
+      "Bash(yarn format:*)",
+      "Bash(yarn dev:*)",
+      "Bash(timeout:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
