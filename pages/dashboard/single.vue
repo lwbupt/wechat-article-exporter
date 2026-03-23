@@ -246,10 +246,11 @@ watch(
   { deep: true }
 );
 
-onMounted(() => {
-  globalRowData.value.forEach(row => {
-    upsertArticleStub(row);
-  });
+onMounted(async () => {
+  // 将本地存储的文章保存到后端数据库
+  for (const row of globalRowData.value) {
+    await upsertArticleStub(row);
+  }
 });
 
 function normalizeUrl(url: string) {
@@ -257,26 +258,53 @@ function normalizeUrl(url: string) {
   if (!trimmed) throw new Error('链接不能为空');
   const hasProtocol = /^https?:\/\//i.test(trimmed);
   const normalized = hasProtocol ? trimmed : `https://${trimmed}`;
+
+  // 检查是否是有效的微信文章链接
   const parsed = new URL(normalized);
   if (parsed.hostname !== 'mp.weixin.qq.com') {
     throw new Error('请输入有效的公众号文章链接!');
   }
-  return parsed.toString();
+
+  // 保留 hash 片段（如 #rd）
+  const hash = parsed.hash;
+  const baseUrl = parsed.origin + parsed.pathname + parsed.search;
+
+  return hash ? baseUrl + hash : baseUrl;
 }
 
 function parseUrlParams(url: string) {
   const parsed = new URL(url);
   const params = parsed.searchParams;
   const fakeid = params.get('__biz') || 'SINGLE_ARTICLE_FAKEID';
-  const mid = params.get('mid') || params.get('appmsgid') || `${Date.now()}`;
+
+  // 尝试从 URL 参数中获取 mid 和 idx
+  const mid = params.get('mid') || params.get('appmsgid');
   const idx = params.get('idx') || params.get('itemidx') || '1';
-  return { fakeid, mid: Number(mid), idx: Number(idx) || 1 };
+
+  // 如果 URL 中没有 mid 参数（如 https://mp.weixin.qq.com/s/xxxxx 格式），
+  // 则使用 URL 的 path 作为唯一标识
+  let uniqueId: string;
+  if (mid) {
+    uniqueId = `${Number(mid)}_${Number(idx) || 1}`;
+  } else {
+    // 使用 URL path 的最后一部分作为唯一标识
+    // 例如：https://mp.weixin.qq.com/s/szR_E-1Nk_6sSDsu7ygqkQ -> szR_E-1Nk_6sSDsu7ygqkQ
+    const pathParts = parsed.pathname.split('/');
+    uniqueId = pathParts[pathParts.length - 1] || parsed.pathname;
+  }
+
+  return {
+    fakeid,
+    mid: mid ? Number(mid) : 0,
+    idx: Number(idx) || 1,
+    uniqueId,
+  };
 }
 
 function createRow(url: string): SingleArticleRow {
-  const { fakeid, mid, idx } = parseUrlParams(url);
+  const { fakeid, mid, idx, uniqueId } = parseUrlParams(url);
   const timestamp = dayjs().unix();
-  const aid = `${mid}_${idx}`;
+  const aid = uniqueId; // 使用 uniqueId 作为 aid
   const generatedId =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -310,7 +338,7 @@ async function addArticle() {
     }
     const row = createRow(normalized);
     globalRowData.value = [row, ...globalRowData.value];
-    await upsertArticleStub(row);
+    await upsertArticleStub(row); // 现在是异步函数
     refreshGrid();
     inputUrl.value = '';
     await downloadRows([row], { silent: true });
@@ -355,8 +383,32 @@ function buildVirtualArticle(row: SingleArticleRow): AppMsgExWithFakeID {
   };
 }
 
-function upsertArticleStub(row: SingleArticleRow) {
-  return db.article.put(buildVirtualArticle(row), `${row.fakeid}:${row.aid}`);
+async function upsertArticleStub(row: SingleArticleRow) {
+  // 先保存到前端 IndexedDB
+  const frontendResult = db.article.put(buildVirtualArticle(row), `${row.fakeid}:${row.aid}`);
+
+  // 同时保存到后端 SQLite 数据库
+  try {
+    await $fetch('/api/query/article/save', {
+      method: 'POST',
+      body: {
+        fakeid: row.fakeid,
+        aid: row.aid,
+        title: row.title,
+        link: row.link,
+        author_name: row.author_name,
+        digest: row.digest,
+        cover: row.cover,
+        create_time: row.create_time,
+        update_time: row.update_time,
+        itemidx: row.itemidx,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to save article to backend:', error);
+  }
+
+  return frontendResult;
 }
 
 function getSelectedRows(): SingleArticleRow[] {

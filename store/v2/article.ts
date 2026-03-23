@@ -83,13 +83,10 @@ export async function getArticleCache(fakeid: string, create_time: number): Prom
  */
 export async function getArticleByLink(url: string): Promise<AppMsgExWithFakeID> {
   try {
-    // 需要先根据 link 查询文章，然后获取 fakeid 和 aid
-    const response = await $fetch<ApiResponse<any[]>>(`/api/query/articles`);
+    // 使用新的 API 端点根据 link 查询文章
+    const response = await $fetch<ApiResponse<any>>(`/api/query/article/by-link?link=${encodeURIComponent(url)}`);
     if (response?.success && response.data) {
-      const article = response.data.find(a => a.link === url);
-      if (article) {
-        return article;
-      }
+      return response.data;
     }
     throw new Error(`Article(${url}) does not exist`);
   } catch (error) {
@@ -103,14 +100,12 @@ export async function getArticleByLink(url: string): Promise<AppMsgExWithFakeID>
  * @param url
  */
 export async function getSingleArticleByLink(url: string): Promise<AppMsgExWithFakeID> {
-  // 单篇文章的 fakeid 为 'SINGLE_ARTICLE_FAKEID'
+  // 使用与 getArticleByLink 相同的 API 端点
+  // 单篇文章也会通过 link 查询到
   try {
-    const response = await $fetch<ApiResponse<any[]>>(`/api/query/articles`);
+    const response = await $fetch<ApiResponse<any>>(`/api/query/article/by-link?link=${encodeURIComponent(url)}`);
     if (response?.success && response.data) {
-      const article = response.data.find(a => a.link === url && a.fakeid === 'SINGLE_ARTICLE_FAKEID');
-      if (article) {
-        return article;
-      }
+      return response.data;
     }
     throw new Error(`Article(${url}) does not exist`);
   } catch (error) {
