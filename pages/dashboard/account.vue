@@ -66,12 +66,32 @@ function addAccount() {
 }
 async function onSelectAccount(account: MpAccount) {
   addBtnLoading.value = true;
-  await loadAccountArticle(account, false);
-  await refresh();
-  addBtnLoading.value = false;
-  toast.success('公众号添加成功', `已成功添加公众号【${account.nickname}】，并同步了第一页的文章数据`);
-  // 通知 Credentials 面板按钮立即变更为“已添加”
-  accountEventBus.emit('account-added', { fakeid: account.fakeid });
+  try {
+    // 先保存公众号到数据库
+    await $fetch('/api/query/account/save', {
+      method: 'POST',
+      body: {
+        fakeid: account.fakeid,
+        nickname: account.nickname,
+        round_head_img: account.round_head_img,
+        signature: account.signature,
+        service_type: account.service_type,
+      },
+    });
+
+    // 然后加载第一页文章
+    await loadAccountArticle(account, false);
+    await refresh();
+
+    toast.success('公众号添加成功', `已成功添加公众号【${account.nickname}】，并同步了第一页的文章数据`);
+    // 通知 Credentials 面板按钮立即变更为"已添加"
+    accountEventBus.emit('account-added', { fakeid: account.fakeid });
+  } catch (error) {
+    console.error('Failed to save account:', error);
+    toast.error('添加失败', `保存公众号【${account.nickname}】失败，请重试`);
+  } finally {
+    addBtnLoading.value = false;
+  }
 }
 
 // 表示同步过程中是否执行了取消操作

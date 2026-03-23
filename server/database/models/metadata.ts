@@ -8,6 +8,7 @@ export interface ArticleMetadata {
   article_id: number;
   read_num?: number;
   like_num?: number;
+  old_like_num?: number;
   comment_num?: number;
   reward_num?: number;
   share_num?: number;
@@ -15,6 +16,7 @@ export interface ArticleMetadata {
   real_like_num?: number;
   picked_num?: number;
   play_num?: number;
+  download_time?: number;
 }
 
 /**
@@ -22,23 +24,25 @@ export interface ArticleMetadata {
  */
 export function upsertArticleMetadata(metadata: ArticleMetadata): void {
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO article_html (
-      article_id, read_num, like_num, comment_num, reward_num, share_num,
-      real_read_num, real_like_num, picked_num, play_num
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO article_metadata (
+      article_id, read_num, like_num, old_like_num, comment_num, reward_num, share_num,
+      real_read_num, real_like_num, picked_num, play_num, download_time
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
     metadata.article_id,
     metadata.read_num || 0,
     metadata.like_num || 0,
+    metadata.old_like_num || 0,
     metadata.comment_num || 0,
     metadata.reward_num || 0,
     metadata.share_num || 0,
     metadata.real_read_num || 0,
     metadata.real_like_num || 0,
     metadata.picked_num || 0,
-    metadata.play_num || 0
+    metadata.play_num || 0,
+    metadata.download_time || Math.floor(Date.now() / 1000)
   );
 }
 

@@ -3,7 +3,9 @@
  * 支持筛选、分页、排序
  */
 
+import db from '~/server/database/index';
 import { getArticleCountByFakeid, getArticlesByFakeid } from '~/server/database/models/article';
+import { getArticleMetadata } from '~/server/database/models/metadata';
 
 export default defineEventHandler(async event => {
   try {
@@ -26,6 +28,8 @@ export default defineEventHandler(async event => {
       isOriginal: query.is_original === 'true' ? true : query.is_original === 'false' ? false : undefined,
       contentDownload: query.content_download === 'true',
       commentDownload: query.comment_download === 'true',
+      isDeleted: query.is_deleted === 'true' ? true : query.is_deleted === 'false' ? false : undefined,
+      status: (query.status as string)?.trim(),
     };
 
     // 分页参数
@@ -37,41 +41,91 @@ export default defineEventHandler(async event => {
     const sortBy = (query.sortBy as string) || 'datetime';
     const sortOrder = (query.sortOrder as string) === 'asc' ? 'ASC' : 'DESC';
 
-    // 获取所有数据（TODO: 优化为数据库层筛选）
-    let articles = getArticlesByFakeid(fakeid, 10000, 0); // 获取所有数据
+    // 构建数据库查询
+    let sql = 'SELECT * FROM articles WHERE fakeid = ?';
+    const params: any[] = [fakeid];
 
-    // 应用筛选
+    // 应用筛选（在数据库层）
     if (filter.title) {
-      articles = articles.filter(art => art.title?.toLowerCase().includes(filter.title!.toLowerCase()));
+      sql += ' AND title LIKE ?';
+      params.push(`%${filter.title}%`);
     }
     if (filter.author) {
-      articles = articles.filter(art => art.author_name?.toLowerCase().includes(filter.author!.toLowerCase()));
+      sql += ' AND author_name LIKE ?';
+      params.push(`%${filter.author}%`);
     }
     if (filter.isOriginal !== undefined) {
-      articles = articles.filter(art => art.is_original === filter.isOriginal);
+      sql += ' AND is_original = ?';
+      params.push(filter.isOriginal ? 1 : 0);
     }
     if (filter.contentDownload) {
-      articles = articles.filter(art => art.content_download === 1);
+      sql += ' AND content_download = 1';
     }
     if (filter.commentDownload) {
-      articles = articles.filter(art => art.comment_download === 1);
+      sql += ' AND comment_download = 1';
+    }
+    if (filter.isDeleted !== undefined) {
+      sql += ' AND is_deleted = ?';
+      params.push(filter.isDeleted ? 1 : 0);
+    }
+    if (filter.status) {
+      sql += ' AND _status = ?';
+      params.push(filter.status);
     }
 
-    // 应用排序
-    articles.sort((a, b) => {
-      const aVal = a[sortBy as keyof typeof a] || 0;
-      const bVal = b[sortBy as keyof typeof b] || 0;
-      const comparison = aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
-      return sortOrder === 'ASC' ? comparison : -comparison;
-    });
+    // 获取总数
+    const countStmt = db.prepare(sql.replace('SELECT *', 'SELECT COUNT(*) as count'));
+    const totalResult = countStmt.get(...params) as { count: number };
+    const total = totalResult.count;
 
-    // 分页
-    const total = articles.length;
-    const data = articles.slice(offset, offset + limit);
+    // 添加排序和分页
+    sql += ` ORDER BY ${sortBy} ${sortOrder}`;
+    sql += ' LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    // 执行查询
+    const stmt = db.prepare(sql);
+    let articles = stmt.all(...params) as any[];
+
+    // 关联元数据信息
+    articles = articles.map(article => {
+      // 转换布尔字段
+      const is_deleted = article.is_deleted === 1;
+      const content_download = article.content_download === 1;
+      const comment_download = article.comment_download === 1;
+      const metadata_download = article.metadata_download === 1;
+      const is_original = article.is_original === 1;
+      const _single = article._single === 1;
+
+      // 获取元数据
+      const metadata = getArticleMetadata(article.id);
+
+      return {
+        ...article,
+        is_deleted,
+        content_download,
+        comment_download,
+        metadata_download,
+        is_original,
+        _single,
+        // 前端使用的字段名
+        contentDownload: content_download,
+        commentDownload: comment_download,
+        metadataDownload: metadata_download,
+        // 确保 update_time 有值，优先使用 datetime 字段
+        update_time: article.update_time || article.datetime || article.create_time,
+        // 元数据字段
+        readNum: metadata?.read_num || 0,
+        oldLikeNum: metadata?.old_like_num || 0,
+        likeNum: metadata?.like_num || 0,
+        shareNum: metadata?.share_num || 0,
+        commentNum: metadata?.comment_num || 0,
+      };
+    });
 
     return {
       success: true,
-      data,
+      data: articles,
       pagination: {
         total,
         page,

@@ -96,7 +96,208 @@ export function initDatabase(): void {
     }
   }
 
+  // 运行数据库迁移，添加新字段
+  runMigrations();
+
   console.log('Database initialized successfully');
+}
+
+/**
+ * 运行数据库迁移，添加新字段
+ */
+function runMigrations(): void {
+  try {
+    // 检查 articles 表是否有 is_deleted 字段
+    const articlesTableInfo = db.pragma('table_info(articles)') as Array<{ name: string }>;
+    const articlesColumns = articlesTableInfo.map(col => col.name);
+
+    if (!articlesColumns.includes('is_deleted')) {
+      console.log('[Migration] Adding is_deleted column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN is_deleted BOOLEAN DEFAULT 0');
+    }
+
+    if (!articlesColumns.includes('metadata_download')) {
+      console.log('[Migration] Adding metadata_download column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN metadata_download BOOLEAN DEFAULT 0');
+    }
+
+    if (!articlesColumns.includes('content_download_time')) {
+      console.log('[Migration] Adding content_download_time column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN content_download_time INTEGER');
+    }
+
+    if (!articlesColumns.includes('comment_download_time')) {
+      console.log('[Migration] Adding comment_download_time column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN comment_download_time INTEGER');
+    }
+
+    if (!articlesColumns.includes('metadata_download_time')) {
+      console.log('[Migration] Adding metadata_download_time column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN metadata_download_time INTEGER');
+    }
+
+    if (!articlesColumns.includes('extra_fields')) {
+      console.log('[Migration] Adding extra_fields column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN extra_fields TEXT');
+    }
+
+    if (!articlesColumns.includes('itemidx')) {
+      console.log('[Migration] Adding itemidx column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN itemidx INTEGER DEFAULT 1');
+    }
+
+    // 检查 article_html 表的字段
+    const htmlTableInfo = db.pragma('table_info(article_html)') as Array<{ name: string }>;
+    const htmlColumns = htmlTableInfo.map(col => col.name);
+
+    if (!htmlColumns.includes('is_valid')) {
+      console.log('[Migration] Adding is_valid column to article_html table');
+      db.exec('ALTER TABLE article_html ADD COLUMN is_valid BOOLEAN DEFAULT 1');
+    }
+
+    if (!htmlColumns.includes('validation_error')) {
+      console.log('[Migration] Adding validation_error column to article_html table');
+      db.exec('ALTER TABLE article_html ADD COLUMN validation_error TEXT');
+    }
+
+    if (!htmlColumns.includes('created_at')) {
+      console.log('[Migration] Adding created_at column to article_html table');
+      db.exec('ALTER TABLE article_html ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    if (!htmlColumns.includes('updated_at')) {
+      console.log('[Migration] Adding updated_at column to article_html table');
+      db.exec('ALTER TABLE article_html ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    // 检查 article_metadata 表的字段
+    const metadataTableInfo = db.pragma('table_info(article_metadata)') as Array<{ name: string }>;
+    const metadataColumns = metadataTableInfo.map(col => col.name);
+
+    if (!metadataColumns.includes('old_like_num')) {
+      console.log('[Migration] Adding old_like_num column to article_metadata table');
+      db.exec('ALTER TABLE article_metadata ADD COLUMN old_like_num INTEGER DEFAULT 0');
+    }
+
+    if (!metadataColumns.includes('download_time')) {
+      console.log('[Migration] Adding download_time column to article_metadata table');
+      db.exec('ALTER TABLE article_metadata ADD COLUMN download_time INTEGER');
+    }
+
+    if (!metadataColumns.includes('created_at')) {
+      console.log('[Migration] Adding created_at column to article_metadata table');
+      db.exec('ALTER TABLE article_metadata ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    if (!metadataColumns.includes('updated_at')) {
+      console.log('[Migration] Adding updated_at column to article_metadata table');
+      db.exec('ALTER TABLE article_metadata ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    // 检查 comments 表的字段
+    const commentsTableInfo = db.pragma('table_info(comments)') as Array<{ name: string }>;
+    const commentsColumns = commentsTableInfo.map(col => col.name);
+
+    if (!commentsColumns.includes('download_time')) {
+      console.log('[Migration] Adding download_time column to comments table');
+      db.exec('ALTER TABLE comments ADD COLUMN download_time INTEGER');
+    }
+
+    if (!commentsColumns.includes('created_at')) {
+      console.log('[Migration] Adding created_at column to comments table');
+      db.exec('ALTER TABLE comments ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    if (!commentsColumns.includes('updated_at')) {
+      console.log('[Migration] Adding updated_at column to comments table');
+      db.exec('ALTER TABLE comments ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    // 检查 comment_replies 表的字段
+    const repliesTableInfo = db.pragma('table_info(comment_replies)') as Array<{ name: string }>;
+    const repliesColumns = repliesTableInfo.map(col => col.name);
+
+    if (!repliesColumns.includes('download_time')) {
+      console.log('[Migration] Adding download_time column to comment_replies table');
+      db.exec('ALTER TABLE comment_replies ADD COLUMN download_time INTEGER');
+    }
+
+    if (!repliesColumns.includes('created_at')) {
+      console.log('[Migration] Adding created_at column to comment_replies table');
+      db.exec('ALTER TABLE comment_replies ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    if (!repliesColumns.includes('updated_at')) {
+      console.log('[Migration] Adding updated_at column to comment_replies table');
+      db.exec('ALTER TABLE comment_replies ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    // 创建新索引（如果不存在）
+    const indexes = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'")
+      .all() as Array<{ name: string }>;
+    const existingIndexes = new Set(indexes.map(idx => idx.name));
+
+    const newIndexes = [
+      'idx_articles_status',
+      'idx_articles_is_deleted',
+      'idx_articles_content_download',
+      'idx_articles_comment_download',
+      'idx_articles_metadata_download',
+      'idx_articles_link',
+      'idx_comments_download_time',
+    ];
+
+    for (const indexName of newIndexes) {
+      if (!existingIndexes.has(indexName)) {
+        console.log(`[Migration] Creating index ${indexName}`);
+        try {
+          if (indexName === 'idx_articles_status') {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(_status)');
+          } else if (indexName === 'idx_articles_is_deleted') {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_articles_is_deleted ON articles(is_deleted)');
+          } else if (indexName === 'idx_articles_content_download') {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_articles_content_download ON articles(content_download)');
+          } else if (indexName === 'idx_articles_comment_download') {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_articles_comment_download ON articles(comment_download)');
+          } else if (indexName === 'idx_articles_metadata_download') {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_articles_metadata_download ON articles(metadata_download)');
+          } else if (indexName === 'idx_articles_link') {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link)');
+          } else if (indexName === 'idx_comments_download_time') {
+            db.exec('CREATE INDEX IF NOT EXISTS idx_comments_download_time ON comments(download_time)');
+          }
+        } catch (error) {
+          console.error(`Failed to create index ${indexName}:`, error);
+        }
+      }
+    }
+
+    // 修复所有公众号的 articles 字段（统计实际文章数量）
+    console.log('[Migration] Fixing articles count for all accounts');
+    db.exec(`
+      UPDATE mp_accounts
+      SET articles = (
+        SELECT COUNT(*) FROM articles
+        WHERE articles.fakeid = mp_accounts.fakeid
+      )
+    `);
+
+    // 修复所有公众号的 count 字段（基于 itemidx = 1 统计消息数）
+    // 如果所有文章的 itemidx 都是默认值 1，则 count = articles
+    console.log('[Migration] Fixing count for all accounts');
+    db.exec(`
+      UPDATE mp_accounts
+      SET count = (
+        SELECT COUNT(DISTINCT CASE WHEN itemidx = 1 THEN aid END) FROM articles
+        WHERE articles.fakeid = mp_accounts.fakeid
+      )
+    `);
+
+    console.log('Database migrations completed');
+  } catch (error) {
+    console.error('Migration error:', error);
+  }
 }
 
 /**

@@ -24,11 +24,9 @@ import AccountSelectorForArticle from '~/components/selector/AccountSelectorForA
 import { isDev, websiteName } from '~/config';
 import { sharedGridOptions } from '~/config/shared-grid-options';
 import { articleDeleted, getArticleCache, updateArticleStatus } from '~/store/v2/article';
-import { getCommentCache } from '~/store/v2/comment';
 import { getDebugCache } from '~/store/v2/debug';
-import { getHtmlCache } from '~/store/v2/html';
 import { type MpAccount } from '~/store/v2/info';
-import { getMetadataCache, type Metadata } from '~/store/v2/metadata';
+import { type Metadata } from '~/store/v2/metadata';
 import type { Preferences } from '~/types/preferences';
 import type { AppMsgExWithFakeID } from '~/types/types';
 import type { ArticleMetadata } from '~/utils/download/types';
@@ -330,6 +328,7 @@ const preferences = usePreferences();
 const hideDeleted = computed(() => (preferences.value as unknown as Preferences).hideDeleted);
 
 const previewArticleRef = ref<typeof PreviewArticle | null>(null);
+const accountSelectorRef = ref<{ refreshAccounts: () => Promise<void> } | null>(null);
 
 function preview(article: Article) {
   previewArticleRef.value!.open(article);
@@ -344,31 +343,21 @@ watch(selectedAccount, newVal => {
   switchTableData(newVal!.fakeid).catch(() => {});
 });
 
+// 组件挂载时刷新公众号列表，确保显示最新的文章数量
+onMounted(async () => {
+  await accountSelectorRef.value?.refreshAccounts();
+});
+
+// 组件激活时刷新公众号列表（用于从其他页面切换回来时更新数据）
+onActivated(async () => {
+  await accountSelectorRef.value?.refreshAccounts();
+});
+
 async function switchTableData(fakeid: string) {
   loading.value = true;
-  const articles: Article[] = [];
   const data = await getArticleCache(fakeid, Math.floor(Date.now() / 1000));
-  for (const article of data) {
-    const contentDownload = (await getHtmlCache(article.link)) !== undefined;
-    const commentDownload = (await getCommentCache(article.link)) !== undefined;
-    const metadata = await getMetadataCache(article.link);
-    if (metadata) {
-      articles.push({
-        ...metadata,
-        ...article,
-        contentDownload: contentDownload,
-        commentDownload: commentDownload,
-      });
-    } else {
-      articles.push({
-        ...article,
-        contentDownload: contentDownload,
-        commentDownload: commentDownload,
-      });
-    }
-  }
   await sleep(200);
-  globalRowData = articles.filter(article => (hideDeleted.value ? !article.is_deleted : true));
+  globalRowData = data.filter(article => (hideDeleted.value ? !article.is_deleted : true));
   gridApi.value?.setGridOption('rowData', globalRowData);
   loading.value = false;
 }
@@ -512,7 +501,7 @@ function copyWechatLink() {
       <header class="flex flex-col items-start lg:flex-row lg:items-center lg:justify-between gap-2 px-3 py-2">
         <div class="flex flex-col xl:flex-row gap-2">
           <div class="flex space-x-3">
-            <AccountSelectorForArticle v-model="selectedAccount" class="w-80" />
+            <AccountSelectorForArticle ref="accountSelectorRef" v-model="selectedAccount" class="w-80" />
           </div>
         </div>
         <div class="flex items-center space-x-2">

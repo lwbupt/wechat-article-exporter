@@ -20,6 +20,12 @@ interface ApiResponse<T> {
   };
 }
 
+interface UpdateStatusResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 /**
  * 更新文章缓存（由后端自动处理）
  * @param account
@@ -58,7 +64,7 @@ export async function hitCache(fakeid: string, create_time: number): Promise<boo
 export async function getArticleCache(fakeid: string, create_time: number): Promise<AppMsgExWithFakeID[]> {
   try {
     const response = await $fetch<ApiResponse<any[]>>(
-      `/api/query/articles?fakeid=${fakeid}&limit=1000&sortBy=datetime&sortOrder=desc`
+      `/api/query/articles?fakeid=${fakeid}&limit=10000&sortBy=datetime&sortOrder=desc`
     );
     if (response?.success && response.data) {
       // 过滤出指定时间之前的文章
@@ -117,31 +123,53 @@ export async function getSingleArticleByLink(url: string): Promise<AppMsgExWithF
  * 文章删除状态更新
  * @param url
  * @param is_deleted
- * @deprecated 需要后端支持
  */
 export async function articleDeleted(url: string, is_deleted = true): Promise<void> {
-  // TODO: 需要后端添加删除/更新 API
-  console.warn('articleDeleted: backend API not implemented yet', url, is_deleted);
+  try {
+    const response = await $fetch<UpdateStatusResponse>('/api/query/article/update-status', {
+      method: 'POST',
+      body: {
+        link: url,
+        isDeleted: is_deleted,
+        status: is_deleted ? '已删除' : undefined,
+      },
+    });
+    if (!response?.success) {
+      console.error('Failed to update article deleted status:', response?.error);
+    }
+  } catch (error) {
+    console.error('Failed to update article deleted status:', error);
+  }
 }
 
 /**
  * 更新文章状态
  * @param url
  * @param status
- * @deprecated 需要后端支持
  */
 export async function updateArticleStatus(url: string, status: string): Promise<void> {
-  // TODO: 需要后端添加更新 API
-  console.warn('updateArticleStatus: backend API not implemented yet', url, status);
+  try {
+    const response = await $fetch<UpdateStatusResponse>('/api/query/article/update-status', {
+      method: 'POST',
+      body: {
+        link: url,
+        status: status,
+      },
+    });
+    if (!response?.success) {
+      console.error('Failed to update article status:', response?.error);
+    }
+  } catch (error) {
+    console.error('Failed to update article status:', error);
+  }
 }
 
 /**
  * 更新文章的 fakeid
  * @param url
  * @param fakeid
- * @deprecated 需要后端支持
+ * @deprecated 暂不支持，需要修改数据库表结构
  */
 export async function updateArticleFakeid(url: string, fakeid: string): Promise<void> {
-  // TODO: 需要后端添加更新 API
-  console.warn('updateArticleFakeid: backend API not implemented yet', url, fakeid);
+  console.warn('updateArticleFakeid: not supported yet', url, fakeid);
 }

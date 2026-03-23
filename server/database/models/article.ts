@@ -18,11 +18,18 @@ export interface Article {
   datetime?: number;
   create_time?: number;
   link?: string;
+  itemidx?: number;
   item_show_type?: number;
   _status?: string;
   _single?: boolean;
+  is_deleted?: boolean;
   content_download?: boolean;
   comment_download?: boolean;
+  metadata_download?: boolean;
+  content_download_time?: number;
+  comment_download_time?: number;
+  metadata_download_time?: number;
+  extra_fields?: string;
 }
 
 /**
@@ -33,8 +40,10 @@ export function upsertArticle(article: Article): void {
     INSERT INTO articles (
       fakeid, aid, type, title, digest, content, cover, author_name,
       copyright_stat, is_original, datetime, create_time, link,
-      item_show_type, _status, _single, content_download, comment_download
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      itemidx, item_show_type, _status, _single, is_deleted, content_download,
+      comment_download, metadata_download, content_download_time,
+      comment_download_time, metadata_download_time, extra_fields
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(fakeid, aid) DO UPDATE SET
       title = excluded.title,
       digest = excluded.digest,
@@ -46,11 +55,18 @@ export function upsertArticle(article: Article): void {
       datetime = excluded.datetime,
       create_time = excluded.create_time,
       link = excluded.link,
+      itemidx = excluded.itemidx,
       item_show_type = excluded.item_show_type,
       _status = excluded._status,
       _single = excluded._single,
+      is_deleted = excluded.is_deleted,
       content_download = excluded.content_download,
-      comment_download = excluded.comment_download
+      comment_download = excluded.comment_download,
+      metadata_download = excluded.metadata_download,
+      content_download_time = excluded.content_download_time,
+      comment_download_time = excluded.comment_download_time,
+      metadata_download_time = excluded.metadata_download_time,
+      extra_fields = excluded.extra_fields
   `);
 
   stmt.run(
@@ -67,11 +83,18 @@ export function upsertArticle(article: Article): void {
     article.datetime || null,
     article.create_time || null,
     article.link || null,
+    article.itemidx || 1,
     article.item_show_type || 0,
     article._status || 'pending',
     article._single ? 1 : 0,
+    article.is_deleted ? 1 : 0,
     article.content_download ? 1 : 0,
-    article.comment_download ? 1 : 0
+    article.comment_download ? 1 : 0,
+    article.metadata_download ? 1 : 0,
+    article.content_download_time || null,
+    article.comment_download_time || null,
+    article.metadata_download_time || null,
+    article.extra_fields || null
   );
 }
 
@@ -127,19 +150,59 @@ export function updateArticleStatus(fakeid: string, aid: string, status: string)
 }
 
 /**
+ * 更新文章删除状态
+ */
+export function updateArticleDeleted(fakeid: string, aid: string, isDeleted: boolean): void {
+  const stmt = db.prepare('UPDATE articles SET is_deleted = ? WHERE fakeid = ? AND aid = ?');
+  stmt.run(isDeleted ? 1 : 0, fakeid, aid);
+}
+
+/**
  * 更新文章内容下载状态
  */
 export function updateArticleContentDownload(fakeid: string, aid: string, downloaded: boolean): void {
-  const stmt = db.prepare('UPDATE articles SET content_download = ? WHERE fakeid = ? AND aid = ?');
-  stmt.run(downloaded ? 1 : 0, fakeid, aid);
+  const stmt = db.prepare(
+    'UPDATE articles SET content_download = ?, content_download_time = ? WHERE fakeid = ? AND aid = ?'
+  );
+  stmt.run(downloaded ? 1 : 0, downloaded ? Math.floor(Date.now() / 1000) : null, fakeid, aid);
 }
 
 /**
  * 更新文章评论下载状态
  */
 export function updateArticleCommentDownload(fakeid: string, aid: string, downloaded: boolean): void {
-  const stmt = db.prepare('UPDATE articles SET comment_download = ? WHERE fakeid = ? AND aid = ?');
-  stmt.run(downloaded ? 1 : 0, fakeid, aid);
+  const stmt = db.prepare(
+    'UPDATE articles SET comment_download = ?, comment_download_time = ? WHERE fakeid = ? AND aid = ?'
+  );
+  stmt.run(downloaded ? 1 : 0, downloaded ? Math.floor(Date.now() / 1000) : null, fakeid, aid);
+}
+
+/**
+ * 更新文章元数据下载状态
+ */
+export function updateArticleMetadataDownload(fakeid: string, aid: string, downloaded: boolean): void {
+  const stmt = db.prepare(
+    'UPDATE articles SET metadata_download = ?, metadata_download_time = ? WHERE fakeid = ? AND aid = ?'
+  );
+  stmt.run(downloaded ? 1 : 0, downloaded ? Math.floor(Date.now() / 1000) : null, fakeid, aid);
+}
+
+/**
+ * 根据 link 获取文章
+ */
+export function getArticleByLink(link: string): any | null {
+  const stmt = db.prepare('SELECT * FROM articles WHERE link = ?');
+  const result = stmt.get(link) as any;
+  return result || null;
+}
+
+/**
+ * 根据 link 获取 fakeid 和 aid
+ */
+export function getArticleFakeidAidByLink(link: string): { fakeid: string; aid: string } | null {
+  const stmt = db.prepare('SELECT fakeid, aid FROM articles WHERE link = ?');
+  const result = stmt.get(link) as { fakeid: string; aid: string } | undefined;
+  return result || null;
 }
 
 /**

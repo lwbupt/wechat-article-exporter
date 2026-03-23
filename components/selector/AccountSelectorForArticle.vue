@@ -40,13 +40,24 @@
 import { getAllInfo, type MpAccount } from '~/store/v2/info';
 
 // 已缓存的公众号信息
-const cachedAccountInfos = await getAllInfo();
+const cachedAccountInfos = ref<MpAccount[]>(await getAllInfo());
 const sortedAccountInfos = computed(() => {
-  cachedAccountInfos.sort((a, b) => {
+  const sorted = [...cachedAccountInfos.value];
+  sorted.sort((a, b) => {
     return a.articles > b.articles ? -1 : 1;
   });
-  return cachedAccountInfos;
+  return sorted;
 });
 
 const selected = defineModel<MpAccount | undefined>();
+
+// 刷新公众号列表（用于同步后更新数据）
+async function refreshAccounts() {
+  cachedAccountInfos.value = await getAllInfo();
+}
+
+// 暴露刷新方法供父组件调用
+defineExpose({
+  refreshAccounts,
+});
 </script>

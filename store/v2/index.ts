@@ -1,38 +1,27 @@
 import { db } from './db';
 
-// 删除公众号数据
-export async function deleteAccountData(ids: string[]): Promise<void> {
-  return db.transaction(
-    'rw',
-    [
-      'api',
-      'article',
-      'asset',
-      'comment',
-      'comment_reply',
-      'debug',
-      'html',
-      'info',
-      'metadata',
-      'resource',
-      'resource-map',
-    ],
-    async () => {
-      // todo: 调后台接口保存最近90天的接口调用情况
-      // const apis = await db.api.toArray();
-      // console.log('apis', apis);
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  error?: string;
+  deletedCount?: number;
+}
 
-      db.api.toCollection().delete();
-      db.article.where('fakeid').anyOf(ids).delete();
-      db.asset.where('fakeid').anyOf(ids).delete();
-      db.comment.where('fakeid').anyOf(ids).delete();
-      db.comment_reply.where('fakeid').anyOf(ids).delete();
-      db.debug.where('fakeid').anyOf(ids).delete();
-      db.html.where('fakeid').anyOf(ids).delete();
-      db.info.where('fakeid').anyOf(ids).delete();
-      db.metadata.where('fakeid').anyOf(ids).delete();
-      db.resource.where('fakeid').anyOf(ids).delete();
-      db['resource-map'].where('fakeid').anyOf(ids).delete();
+// 删除公众号数据（通过后端 API）
+export async function deleteAccountData(ids: string[]): Promise<void> {
+  try {
+    const fakeids = ids.join(',');
+    const response = await $fetch<ApiResponse>(`/api/query/account/delete?fakeids=${fakeids}`, {
+      method: 'DELETE',
+    });
+
+    if (!response?.success) {
+      throw new Error(response?.error || 'Failed to delete accounts');
     }
-  );
+
+    console.log(`Deleted ${response.deletedCount} account(s)`);
+  } catch (error) {
+    console.error('Failed to delete account data:', error);
+    throw error;
+  }
 }

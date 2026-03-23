@@ -2,15 +2,15 @@
 -- 版本: 1.0.0
 
 -- 删除旧表（开发时使用，生产环境请注释掉）
-DROP TABLE IF EXISTS article_resources;
-DROP TABLE IF EXISTS comment_replies;
-DROP TABLE IF EXISTS comments;
-DROP TABLE IF EXISTS article_metadata;
-DROP TABLE IF EXISTS article_html;
-DROP TABLE IF EXISTS assets;
-DROP TABLE IF EXISTS articles;
-DROP TABLE IF EXISTS api_logs;
-DROP TABLE IF EXISTS mp_accounts;
+-- DROP TABLE IF EXISTS article_resources;
+-- DROP TABLE IF EXISTS comment_replies;
+-- DROP TABLE IF EXISTS comments;
+-- DROP TABLE IF EXISTS article_metadata;
+-- DROP TABLE IF EXISTS article_html;
+-- DROP TABLE IF EXISTS assets;
+-- DROP TABLE IF EXISTS articles;
+-- DROP TABLE IF EXISTS api_logs;
+-- DROP TABLE IF EXISTS mp_accounts;
 
 -- 公众号表
 CREATE TABLE IF NOT EXISTS mp_accounts (
@@ -46,11 +46,24 @@ CREATE TABLE IF NOT EXISTS articles (
     datetime INTEGER,
     create_time INTEGER,
     link TEXT,
+    itemidx INTEGER DEFAULT 1,
     item_show_type INTEGER DEFAULT 0,
+    -- 文章状态字段
     _status TEXT DEFAULT 'pending',
     _single BOOLEAN DEFAULT 0,
+    is_deleted BOOLEAN DEFAULT 0,
+    -- 下载状态字段
     content_download BOOLEAN DEFAULT 0,
     comment_download BOOLEAN DEFAULT 0,
+    metadata_download BOOLEAN DEFAULT 0,
+    -- HTML 内容下载时间戳
+    content_download_time INTEGER,
+    -- 评论下载时间戳
+    comment_download_time INTEGER,
+    -- 元数据下载时间戳
+    metadata_download_time INTEGER,
+    -- 扩展字段（用于存储额外的 JSON 数据）
+    extra_fields TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (fakeid) REFERENCES mp_accounts(fakeid) ON DELETE CASCADE,
@@ -62,7 +75,11 @@ CREATE TABLE IF NOT EXISTS article_html (
     article_id INTEGER PRIMARY KEY,
     html_content TEXT,
     file_size INTEGER DEFAULT 0,
-    download_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    download_time INTEGER,
+    is_valid BOOLEAN DEFAULT 1,
+    validation_error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
@@ -71,6 +88,7 @@ CREATE TABLE IF NOT EXISTS article_metadata (
     article_id INTEGER PRIMARY KEY,
     read_num INTEGER DEFAULT 0,
     like_num INTEGER DEFAULT 0,
+    old_like_num INTEGER DEFAULT 0,
     comment_num INTEGER DEFAULT 0,
     reward_num INTEGER DEFAULT 0,
     share_num INTEGER DEFAULT 0,
@@ -78,6 +96,8 @@ CREATE TABLE IF NOT EXISTS article_metadata (
     real_like_num INTEGER DEFAULT 0,
     picked_num INTEGER DEFAULT 0,
     play_num INTEGER DEFAULT 0,
+    download_time INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
@@ -94,6 +114,9 @@ CREATE TABLE IF NOT EXISTS comments (
     is_top BOOLEAN DEFAULT 0,
     create_time INTEGER,
     reply_comment_id TEXT,
+    download_time INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
@@ -105,6 +128,9 @@ CREATE TABLE IF NOT EXISTS comment_replies (
     content TEXT,
     like_num INTEGER DEFAULT 0,
     create_time INTEGER,
+    download_time INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (comment_id) REFERENCES comments(id) ON DELETE CASCADE
 );
 
@@ -146,8 +172,15 @@ CREATE TABLE IF NOT EXISTS api_logs (
 CREATE INDEX IF NOT EXISTS idx_articles_fakeid ON articles(fakeid);
 CREATE INDEX IF NOT EXISTS idx_articles_create_time ON articles(create_time DESC);
 CREATE INDEX IF NOT EXISTS idx_articles_datetime ON articles(datetime DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_status ON articles(_status);
+CREATE INDEX IF NOT EXISTS idx_articles_is_deleted ON articles(is_deleted);
+CREATE INDEX IF NOT EXISTS idx_articles_content_download ON articles(content_download);
+CREATE INDEX IF NOT EXISTS idx_articles_comment_download ON articles(comment_download);
+CREATE INDEX IF NOT EXISTS idx_articles_metadata_download ON articles(metadata_download);
+CREATE INDEX IF NOT EXISTS idx_articles_link ON articles(link);
 CREATE INDEX IF NOT EXISTS idx_comments_article_id ON comments(article_id);
 CREATE INDEX IF NOT EXISTS idx_comments_content_id ON comments(content_id);
+CREATE INDEX IF NOT EXISTS idx_comments_download_time ON comments(download_time);
 CREATE INDEX IF NOT EXISTS idx_assets_fakeid ON assets(fakeid);
 CREATE INDEX IF NOT EXISTS idx_article_resources_article_id ON article_resources(article_id);
 CREATE INDEX IF NOT EXISTS idx_api_logs_call_time ON api_logs(call_time DESC);

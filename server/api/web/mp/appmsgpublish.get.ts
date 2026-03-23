@@ -2,8 +2,10 @@
  * 获取文章列表接口
  */
 
+import db from '~/server/database/index';
+import { updateAccountArticleCount } from '~/server/database/models/account';
 import { getTokenFromStore } from '~/server/utils/CookieStore';
-import { syncArticles } from '~/server/utils/db-sync';
+import { syncAccountStats, syncArticles } from '~/server/utils/db-sync';
 import { proxyMpRequest } from '~/server/utils/proxy-request';
 
 interface AppMsgPublishQuery {
@@ -86,6 +88,28 @@ export default defineEventHandler(async event => {
       if (articles.length > 0) {
         syncArticles(id, articles);
       }
+
+      // 更新公众号统计信息
+      const totalCount = publishPage.total_count || 0;
+
+      // 直接从数据库统计已同步的消息数和文章数
+      const stats = db
+        .prepare(`
+        SELECT
+          COUNT(DISTINCT CASE WHEN itemidx = 1 THEN aid END) as count,
+          COUNT(DISTINCT aid) as articles
+        FROM articles
+        WHERE fakeid = ?
+      `)
+        .get(id) as { count: number; articles: number } | { count: 0; articles: 0 };
+
+      syncAccountStats(id, {
+        total_count: totalCount,
+        count: stats.count, // 已同步消息数（从数据库统计）
+        articles: stats.articles, // 已同步文章数（从数据库统计）
+        completed: stats.count >= totalCount,
+        update_time: Math.floor(Date.now() / 1000),
+      });
     } catch (error) {
       console.error('Failed to sync articles to database:', error);
     }

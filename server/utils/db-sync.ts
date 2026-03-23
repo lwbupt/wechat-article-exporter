@@ -3,7 +3,7 @@
  * 用于在代理 API 返回数据后，将数据同步到 SQLite 数据库
  */
 
-import { upsertAccount, upsertAccounts } from '~/server/database/models/account';
+import { updateAccountStats, upsertAccount, upsertAccounts } from '~/server/database/models/account';
 import { upsertArticle, upsertArticles } from '~/server/database/models/article';
 import { linkArticleResources, upsertAsset } from '~/server/database/models/asset';
 import { insertCommentReplies, insertComments } from '~/server/database/models/comment';
@@ -35,6 +35,28 @@ export function syncAccount(account: any): void {
 }
 
 /**
+ * 同步公众号统计信息
+ * 只更新统计字段，不影响基本信息
+ */
+export function syncAccountStats(
+  fakeid: string,
+  stats: {
+    total_count?: number;
+    count?: number;
+    articles?: number;
+    completed?: boolean;
+    update_time?: number;
+    last_update_time?: number;
+  }
+): void {
+  try {
+    updateAccountStats(fakeid, stats);
+  } catch (error) {
+    console.error('Failed to sync account stats:', error);
+  }
+}
+
+/**
  * 同步文章列表
  */
 export function syncArticles(fakeid: string, articles: any[]): void {
@@ -54,11 +76,14 @@ export function syncArticles(fakeid: string, articles: any[]): void {
       datetime: article.datetime || article.create_time,
       create_time: article.create_time,
       link: article.link,
+      itemidx: article.itemidx || article.item_idx || 1,
       item_show_type: article.item_show_type,
       _status: article._status || 'pending',
       _single: article._single,
+      is_deleted: article.is_deleted || false,
       content_download: article.content_download || false,
       comment_download: article.comment_download || false,
+      metadata_download: article.metadata_download || false,
     }));
 
     upsertArticles(formattedArticles);
@@ -100,6 +125,7 @@ export function syncArticleMetadata(articleId: number, metadata: any): void {
       article_id: articleId,
       read_num: metadata.read_num,
       like_num: metadata.like_num,
+      old_like_num: metadata.old_like_num,
       comment_num: metadata.comment_num,
       reward_num: metadata.reward_num,
       share_num: metadata.share_num,
@@ -107,6 +133,7 @@ export function syncArticleMetadata(articleId: number, metadata: any): void {
       real_like_num: metadata.real_like_num,
       picked_num: metadata.picked_num,
       play_num: metadata.play_num,
+      download_time: Math.floor(Date.now() / 1000),
     });
     console.log(`Synced metadata for article ${articleId}`);
   } catch (error) {

@@ -25,7 +25,9 @@
       "Bash(yarn format:*)",
       "Bash(yarn dev:*)",
       "Bash(timeout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(python:*)"
     ]
   }
 }
