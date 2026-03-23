@@ -265,7 +265,30 @@ function normalizeUrl(url: string) {
     throw new Error('请输入有效的公众号文章链接!');
   }
 
-  // 保留 hash 片段（如 #rd）
+  // 如果是完整参数链接格式（/s?__biz=...&mid=...&idx=...&sn=...），
+  // 转换为简化格式，只保留核心参数，去掉 hash 片段
+  if (parsed.pathname === '/s' && parsed.searchParams.has('__biz')) {
+    const biz = parsed.searchParams.get('__biz');
+    const mid = parsed.searchParams.get('mid');
+    const idx = parsed.searchParams.get('idx');
+
+    // 构建简化URL：保留核心参数（__biz, mid, idx），去掉 sn 和 hash
+    // hash 片段（#rd）可能导致代理服务器处理问题
+    const params = new URLSearchParams();
+    params.set('__biz', biz);
+    if (mid) params.set('mid', mid);
+    if (idx) params.set('idx', idx);
+
+    const simplifiedUrl = `${parsed.origin}/s?${params.toString()}`;
+
+    console.log('[URL Conversion] 完整参数链接 → 简化链接');
+    console.log('[URL Conversion] 原始:', normalized);
+    console.log('[URL Conversion] 转换后:', simplifiedUrl);
+
+    return simplifiedUrl;
+  }
+
+  // 短链接格式（/s/xxxxx），直接返回
   const hash = parsed.hash;
   const baseUrl = parsed.origin + parsed.pathname + parsed.search;
 
