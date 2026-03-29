@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS articles (
     -- 文章状态字段
     _status TEXT DEFAULT 'pending',
     _single BOOLEAN DEFAULT 0,
+    is_hot BOOLEAN DEFAULT 0,
     is_deleted BOOLEAN DEFAULT 0,
     -- 下载状态字段
     content_download BOOLEAN DEFAULT 0,

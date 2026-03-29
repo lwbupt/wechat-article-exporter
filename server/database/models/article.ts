@@ -23,6 +23,7 @@ export interface Article {
   _status?: string;
   _single?: boolean;
   is_deleted?: boolean;
+  is_hot?: boolean;
   content_download?: boolean;
   comment_download?: boolean;
   metadata_download?: boolean;
@@ -40,10 +41,10 @@ export function upsertArticle(article: Article): void {
     INSERT INTO articles (
       fakeid, aid, type, title, digest, content, cover, author_name,
       copyright_stat, is_original, datetime, create_time, link,
-      itemidx, item_show_type, _status, _single, is_deleted, content_download,
+      itemidx, item_show_type, _status, _single, is_deleted, is_hot, content_download,
       comment_download, metadata_download, content_download_time,
       comment_download_time, metadata_download_time, extra_fields
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(fakeid, aid) DO UPDATE SET
       title = excluded.title,
       digest = excluded.digest,
@@ -60,6 +61,7 @@ export function upsertArticle(article: Article): void {
       _status = excluded._status,
       _single = excluded._single,
       is_deleted = excluded.is_deleted,
+      is_hot = excluded.is_hot,
       content_download = excluded.content_download,
       comment_download = excluded.comment_download,
       metadata_download = excluded.metadata_download,
@@ -88,6 +90,7 @@ export function upsertArticle(article: Article): void {
     article._status || 'pending',
     article._single ? 1 : 0,
     article.is_deleted ? 1 : 0,
+    article.is_hot ? 1 : 0,
     article.content_download ? 1 : 0,
     article.comment_download ? 1 : 0,
     article.metadata_download ? 1 : 0,

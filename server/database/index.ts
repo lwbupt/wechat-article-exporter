@@ -146,6 +146,11 @@ function runMigrations(): void {
       db.exec('ALTER TABLE articles ADD COLUMN itemidx INTEGER DEFAULT 1');
     }
 
+    if (!articlesColumns.includes('is_hot')) {
+      console.log('[Migration] Adding is_hot column to articles table');
+      db.exec('ALTER TABLE articles ADD COLUMN is_hot BOOLEAN DEFAULT 0');
+    }
+
     // 检查 article_html 表的字段
     const htmlTableInfo = db.pragma('table_info(article_html)') as Array<{ name: string }>;
     const htmlColumns = htmlTableInfo.map(col => col.name);

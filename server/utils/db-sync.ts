@@ -81,6 +81,7 @@ export function syncArticles(fakeid: string, articles: any[]): void {
       _status: article._status || 'pending',
       _single: article._single,
       is_deleted: article.is_deleted || false,
+      is_hot: article.is_hot || false,
       content_download: article.content_download || false,
       comment_download: article.comment_download || false,
       metadata_download: article.metadata_download || false,

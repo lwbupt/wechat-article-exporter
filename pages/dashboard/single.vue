@@ -16,6 +16,7 @@ import dayjs from 'dayjs';
 import { defu } from 'defu';
 import { onMounted } from 'vue';
 import { formatTimeStamp } from '#shared/utils/helpers';
+import { getAccountList } from '~/apis';
 import GridArticleActions from '~/components/grid/ArticleActions.vue';
 import GridLoading from '~/components/grid/Loading.vue';
 import GridNoRows from '~/components/grid/NoRows.vue';
@@ -486,6 +487,9 @@ const {
       await articleDeleted(url, false);
 
       updateRow(article);
+
+      // 自动添加公众号：用公众号名称精准匹配
+      await tryAddAccountFromHtml(article);
     } else {
       console.warn(`${url} not found in table data when update contentDownload`);
     }
@@ -612,6 +616,88 @@ async function updateRowFromHtml(row: SingleArticleRow) {
     },
     `${row.fakeid}:${row.aid}`
   );
+}
+
+/**
+ * 单篇文章下载成功后，尝试自动添加公众号到数据库
+ * 用公众号名称精准匹配：数据库中不存在同名公众号时，调搜索API获取完整信息并保存
+ * 同时清理占位符 fakeid（SINGLE_ARTICLE_FAKEID），将文章关联到真实公众号
+ */
+const SINGLE_FAKEID = 'SINGLE_ARTICLE_FAKEID';
+
+async function tryAddAccountFromHtml(row: SingleArticleRow) {
+  const accountName = row.accountName;
+  if (!accountName) return;
+
+  try {
+    // 1. 用公众号名称精准查询数据库
+    const checkResp = await $fetch<{ success: boolean; data: any[] }>(`/api/query/accounts`, {
+      query: { nickname: accountName },
+    });
+
+    // 如果已存在同名公众号，只需要更新文章的占位符 fakeid
+    if (checkResp?.success && checkResp.data && checkResp.data.length > 0) {
+      const existingAccount = checkResp.data[0];
+      await fixPlaceholderFakeid(row, existingAccount.fakeid);
+      return;
+    }
+
+    // 2. 数据库中不存在，调用搜索API
+    const [accounts, _completed] = await getAccountList(0, accountName);
+    if (!accounts || accounts.length === 0) {
+      console.warn(`[auto-add-account] 搜索公众号"${accountName}"无结果`);
+      return;
+    }
+
+    // 3. 精准匹配名称
+    const matched = accounts.find(acc => acc.nickname === accountName);
+    const target = matched || accounts[0];
+
+    // 4. 保存真实公众号到数据库
+    await $fetch('/api/query/account/save', {
+      method: 'POST',
+      body: {
+        fakeid: target.fakeid,
+        nickname: target.nickname,
+        round_head_img: target.round_head_img,
+        signature: target.signature,
+        service_type: target.service_type,
+      },
+    });
+
+    // 5. 将文章的占位符 fakeid 更新为真实 fakeid，并清理空占位符记录
+    await fixPlaceholderFakeid(row, target.fakeid);
+
+    console.log(`[auto-add-account] 已自动添加公众号: ${target.nickname} (${target.fakeid})`);
+  } catch (error) {
+    // 不影响主流程，静默失败
+    console.warn('[auto-add-account] 自动添加公众号失败:', error);
+  }
+}
+
+/**
+ * 如果文章使用的是占位符 fakeid，更新为真实 fakeid，并清理空的占位符公众号记录
+ */
+async function fixPlaceholderFakeid(row: SingleArticleRow, realFakeid: string) {
+  if (row.fakeid !== SINGLE_FAKEID) return;
+
+  try {
+    // 更新文章的 fakeid 为真实值
+    await $fetch('/api/query/article/update-fakeid', {
+      method: 'POST',
+      body: {
+        link: row.link,
+        old_fakeid: SINGLE_FAKEID,
+        new_fakeid: realFakeid,
+      },
+    });
+
+    // 更新本地数据
+    row.fakeid = realFakeid;
+    updateRow(row);
+  } catch (error) {
+    console.warn('[auto-add-account] 更新文章 fakeid 失败:', error);
+  }
 }
 
 function previewRow(row: SingleArticleRow) {

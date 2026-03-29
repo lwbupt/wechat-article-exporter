@@ -3,7 +3,7 @@
  * 用于单篇文章下载页面
  */
 
-import { upsertAccount } from '~/server/database/models/account';
+import { getAccountByFakeid, insertAccountIfNotExists } from '~/server/database/models/account';
 import { upsertArticle } from '~/server/database/models/article';
 
 export default defineEventHandler(async event => {
@@ -18,21 +18,13 @@ export default defineEventHandler(async event => {
       };
     }
 
-    // 先保存公众号（如果不存在）
-    upsertAccount({
-      fakeid,
-      nickname: null,
-      round_head_img: null,
-      signature: null,
-      service_type: 0,
-      completed: false,
-      count: 0,
-      articles: 0,
-      total_count: 0,
-      create_time: null,
-      update_time: null,
-      last_update_time: null,
-    });
+    // 仅在公众号不存在时插入空记录，不覆盖已有数据
+    const existingAccount = getAccountByFakeid(fakeid);
+    if (!existingAccount) {
+      insertAccountIfNotExists({
+        fakeid,
+      });
+    }
 
     // 保存文章
     upsertArticle({
@@ -41,22 +33,15 @@ export default defineEventHandler(async event => {
       type: 0,
       title: title || '未命名文章',
       digest: digest || '',
-      content: null,
-      cover: cover || null,
+      cover: cover || undefined,
       author_name: author_name || '--',
-      copyright_stat: 0,
-      is_original: false,
       datetime: create_time || Math.floor(Date.now() / 1000),
       create_time: create_time || Math.floor(Date.now() / 1000),
       link,
       itemidx: itemidx || 1,
-      item_show_type: 0,
       _status: '',
       _single: true,
-      is_deleted: false,
-      content_download: false,
-      comment_download: false,
-      metadata_download: false,
+      is_hot: true,
     });
 
     return {

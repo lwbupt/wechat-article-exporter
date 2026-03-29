@@ -20,6 +20,34 @@ export interface MpAccount {
 }
 
 /**
+ * 仅在公众号不存在时插入，不覆盖已有数据
+ */
+export function insertAccountIfNotExists(account: MpAccount): void {
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO mp_accounts (
+      fakeid, nickname, round_head_img, signature, service_type,
+      completed, count, articles, total_count,
+      create_time, update_time, last_update_time
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  stmt.run(
+    account.fakeid,
+    account.nickname || null,
+    account.round_head_img || null,
+    account.signature || null,
+    account.service_type || 0,
+    account.completed ? 1 : 0,
+    account.count || 0,
+    account.articles || 0,
+    account.total_count || 0,
+    account.create_time || null,
+    account.update_time || null,
+    account.last_update_time || null
+  );
+}
+
+/**
  * 插入或更新公众号信息
  */
 export function upsertAccount(account: MpAccount): void {
@@ -77,6 +105,28 @@ export function getAccountByFakeid(fakeid: string): MpAccount | null {
   const stmt = db.prepare('SELECT * FROM mp_accounts WHERE fakeid = ?');
   const result = stmt.get(fakeid) as any;
   return result || null;
+}
+
+/**
+ * 根据昵称精准匹配公众号
+ */
+export function getAccountByNickname(nickname: string): MpAccount | null {
+  const stmt = db.prepare('SELECT * FROM mp_accounts WHERE nickname = ?');
+  const result = stmt.get(nickname) as any;
+  return result || null;
+}
+
+/**
+ * 删除没有关联文章的空公众号记录（用于清理占位符）
+ */
+export function deleteAccountIfEmpty(fakeid: string): void {
+  const articleCount = db.prepare('SELECT COUNT(*) as count FROM articles WHERE fakeid = ?').get(fakeid) as {
+    count: number;
+  };
+  if (articleCount.count === 0) {
+    db.prepare('DELETE FROM mp_accounts WHERE fakeid = ?').run(fakeid);
+    console.log(`[cleanup] 已删除空公众号记录: ${fakeid}`);
+  }
 }
 
 /**
