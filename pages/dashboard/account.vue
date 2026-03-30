@@ -540,51 +540,94 @@ function exportAccount() {
 
 const { getActualDateRange } = useSyncDeadline();
 
-// 公众号类别列表（从后端动态加载）
-const categoryOptions = ref<string[]>([]);
+// 分类树形结构
+interface CategoryItem {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  sort_order: number;
+  children?: CategoryItem[];
+}
+
+const categoryTree = ref<CategoryItem[]>([]);
+const childCategories = ref<CategoryItem[]>([]);
+const selectedParentId = ref<number | null>(null);
+const selectedChildId = ref<number | null>(null);
 
 async function loadCategories() {
   try {
-    const resp = await $fetch<{ success: boolean; data: Array<{ name: string }> }>('/api/query/categories');
+    const resp = await $fetch<{ success: boolean; data: CategoryItem[] }>('/api/query/categories');
     if (resp?.success && resp.data) {
-      categoryOptions.value = resp.data.map(c => c.name);
+      categoryTree.value = resp.data;
     }
   } catch (error) {
     console.error('Failed to load categories:', error);
   }
 }
 
+function onParentCategoryChange(parentId: number | null) {
+  selectedParentId.value = parentId;
+  selectedChildId.value = null;
+  if (parentId !== null) {
+    const parent = categoryTree.value.find(c => c.id === parentId);
+    childCategories.value = parent?.children || [];
+  } else {
+    childCategories.value = [];
+  }
+}
+
 // 编辑公众号类别
 const categoryModalVisible = ref(false);
-const categoryInput = ref('');
 const categoryEditAccount = ref<MpAccount | null>(null);
 
 function editCategory(account: MpAccount) {
   categoryEditAccount.value = account;
-  categoryInput.value = account.category || '';
+  selectedParentId.value = null;
+  selectedChildId.value = null;
+  childCategories.value = [];
+
+  const currentCategory = account.category || '';
+  if (currentCategory) {
+    for (const parent of categoryTree.value) {
+      if (parent.name === currentCategory) {
+        selectedParentId.value = parent.id;
+        childCategories.value = parent.children || [];
+        break;
+      }
+      if (parent.children) {
+        const child = parent.children.find(c => c.name === currentCategory);
+        if (child) {
+          selectedParentId.value = parent.id;
+          selectedChildId.value = child.id;
+          childCategories.value = parent.children;
+          break;
+        }
+      }
+    }
+  }
   categoryModalVisible.value = true;
 }
 
-async function confirmCategory(category: string) {
+function getSelectedCategoryName(): string {
+  if (selectedChildId.value) {
+    return childCategories.value.find(c => c.id === selectedChildId.value)?.name || '';
+  }
+  if (selectedParentId.value) {
+    return categoryTree.value.find(c => c.id === selectedParentId.value)?.name || '';
+  }
+  return '';
+}
+
+async function confirmCategory() {
   if (!categoryEditAccount.value) return;
   const account = categoryEditAccount.value;
+  const categoryName = getSelectedCategoryName();
   try {
-    // 更新公众号类别
     await $fetch('/api/query/account/update-field', {
       method: 'POST',
-      body: { fakeid: account.fakeid, field: 'category', value: category },
+      body: { fakeid: account.fakeid, field: 'category', value: categoryName },
     });
-
-    // 如果是自定义类别（不在已有列表中），添加到分类表
-    if (category && !categoryOptions.value.includes(category)) {
-      await $fetch('/api/query/categories', {
-        method: 'POST',
-        body: { name: category },
-      });
-      categoryOptions.value.push(category);
-    }
-
-    account.category = category || undefined;
+    account.category = categoryName || undefined;
     const rowNode = gridApi.value?.getRowNode(account.fakeid);
     if (rowNode) rowNode.updateData({ ...account });
   } catch (error) {
@@ -685,26 +728,36 @@ async function toggleMonitored(account: MpAccount) {
           <span class="font-semibold">设置公众号类别</span>
         </template>
         <div class="flex flex-col gap-3">
-          <div class="flex flex-wrap gap-2">
-            <UButton
-              v-for="opt in categoryOptions"
-              :key="opt"
-              :color="categoryInput === opt ? 'primary' : 'white'"
-              size="sm"
-              @click="categoryInput = opt"
+          <div class="flex flex-col gap-2">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">一级分类</label>
+            <select
+              v-model="selectedParentId"
+              class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+              @change="onParentCategoryChange(($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
             >
-              {{ opt }}
-            </UButton>
+              <option :value="null">不选择分类</option>
+              <option v-for="parent in categoryTree" :key="parent.id" :value="parent.id">
+                {{ parent.name }}
+              </option>
+            </select>
           </div>
-          <UInput v-model="categoryInput" placeholder="输入自定义类别" />
+          <div v-if="childCategories.length > 0" class="flex flex-col gap-2">
+            <label class="text-sm font-medium text-gray-700 dark:text-gray-300">二级分类</label>
+            <select
+              v-model="selectedChildId"
+              class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm"
+            >
+              <option :value="null">不选择子分类</option>
+              <option v-for="child in childCategories" :key="child.id" :value="child.id">
+                {{ child.name }}
+              </option>
+            </select>
+          </div>
         </div>
         <template #footer>
           <div class="flex justify-end gap-2">
             <UButton color="white" @click="categoryModalVisible = false">取消</UButton>
-            <UButton
-              color="primary"
-              @click="confirmCategory(categoryInput)"
-            >
+            <UButton color="primary" @click="confirmCategory">
               确定
             </UButton>
           </div>

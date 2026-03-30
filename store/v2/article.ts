@@ -142,20 +142,47 @@ export async function articleDeleted(url: string, is_deleted = true): Promise<vo
  * @param url
  * @param status
  */
-export async function updateArticleStatus(url: string, status: string): Promise<void> {
+export async function updateArticleStatus(
+  url: string,
+  status: string,
+  extra?: { contentDownload?: boolean; commentDownload?: boolean; metadataDownload?: boolean },
+): Promise<void> {
   try {
+    const body: any = {
+      link: url,
+      status: status,
+    };
+    if (extra) Object.assign(body, extra);
+
     const response = await $fetch<UpdateStatusResponse>('/api/query/article/update-status', {
       method: 'POST',
-      body: {
-        link: url,
-        status: status,
-      },
+      body,
     });
     if (!response?.success) {
       console.error('Failed to update article status:', response?.error);
     }
   } catch (error) {
     console.error('Failed to update article status:', error);
+  }
+}
+
+/**
+ * 更新文章下载状态
+ */
+export async function updateArticleDownload(
+  url: string,
+  updates: { contentDownload?: boolean; commentDownload?: boolean; metadataDownload?: boolean },
+): Promise<void> {
+  try {
+    const response = await $fetch<UpdateStatusResponse>('/api/query/article/update-status', {
+      method: 'POST',
+      body: { link: url, ...updates },
+    });
+    if (!response?.success) {
+      console.error('Failed to update article download status:', response?.error);
+    }
+  } catch (error) {
+    console.error('Failed to update article download status:', error);
   }
 }
 

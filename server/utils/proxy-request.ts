@@ -117,10 +117,15 @@ export async function proxyMpRequest(options: RequestOptions) {
     }
   }
 
-  // 这里是否需要执行？
-  // 更新 CookieStore 中的 cookie
+  // 非登录、非切换公众号的请求：自动刷新 Cookie 以保活 session
   else {
-    // updateCookies(options.event, mpResponse.headers.getSetCookie());
+    const authKey = getAuthKeyFromRequest(options.event);
+    if (authKey) {
+      const setCookieHeaders = mpResponse.headers.getSetCookie();
+      if (setCookieHeaders.length > 0) {
+        cookieStore.updateCookie(authKey, setCookieHeaders);
+      }
+    }
   }
 
   // 构造返回给客户端的响应
@@ -152,10 +157,3 @@ export function getAuthKeyFromRequest(event: H3Event): string {
 
   return authKey;
 }
-
-// function updateCookies(event: H3Event, cookies: string[]): void {
-//   const authKey = getAuthKeyFromRequest(event);
-//   if (authKey) {
-//     cookieStore.updateCookie(authKey, cookies);
-//   }
-// }

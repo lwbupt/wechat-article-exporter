@@ -47,6 +47,12 @@ export default defineNuxtConfig({
       },
     },
   },
+
+  // 开发服务器配置，生产环境由 Nitro 自动读取 HOST/PORT 环境变量
+  devServer: {
+    host: process.env.HOST || 'localhost',
+    port: parseInt(process.env.PORT || '3000', 10),
+  },
   monacoEditor: {
     locale: 'en',
     componentName: {

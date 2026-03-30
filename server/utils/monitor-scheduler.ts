@@ -6,7 +6,7 @@
 import db from '../database/index';
 import { insertMonitorLog } from '../database/models/monitor-log';
 import { syncArticles, syncAccountStats } from './db-sync';
-import { AccountCookie } from './CookieStore';
+import { AccountCookie, cookieStore } from './CookieStore';
 import { getAllMpCookies } from '../kv/cookie';
 import { USER_AGENT } from '~/config';
 
@@ -22,16 +22,16 @@ function getMonitoredAccounts() {
   return db.prepare('SELECT * FROM mp_accounts WHERE is_monitored = 1').all() as any[];
 }
 
-async function getAllCredentials(): Promise<{ cookie: string; token: string }[]> {
+async function getAllCredentials(): Promise<{ cookie: string; token: string; authKey: string }[]> {
   try {
     const allCookies = await getAllMpCookies();
     return allCookies
       .map(saved => {
         const accountCookie = AccountCookie.create(saved.token, saved.cookies);
         const cookieStr = accountCookie.toString();
-        return cookieStr ? { cookie: cookieStr, token: saved.token || '' } : null;
+        return cookieStr ? { cookie: cookieStr, token: saved.token || '', authKey: saved.authKey } : null;
       })
-      .filter(Boolean) as { cookie: string; token: string }[];
+      .filter(Boolean) as { cookie: string; token: string; authKey: string }[];
   } catch (e) {
     console.error('[Monitor] 从 KV 加载 cookie 失败:', e);
     return [];
@@ -46,6 +46,7 @@ async function tryFetchArticles(
   fakeid: string,
   cookieStr: string,
   token: string,
+  authKey: string,
 ): Promise<{ resp: any; error?: string } | null> {
   const params = new URLSearchParams({
     sub: 'list',
@@ -81,7 +82,14 @@ async function tryFetchArticles(
     return null; // 凭证过期，返回 null 让调用方尝试下一个
   }
 
+  // 成功响应：提取 set-cookie 回写以保活 session
   if (resp?.base_resp?.ret === 0 && resp?.publish_page) {
+    const setCookieHeaders = response.headers.getSetCookie();
+    if (setCookieHeaders.length > 0) {
+      cookieStore.updateCookie(authKey, setCookieHeaders).catch((e) => {
+        console.error('[Monitor] 回写 cookie 失败:', e);
+      });
+    }
     return { resp };
   }
 
@@ -111,7 +119,7 @@ async function checkAccount(
     // 逐个尝试凭证，直到找到一个有效的
     let result: { resp: any; error?: string } | null = null;
     for (const cred of credentials) {
-      result = await tryFetchArticles(account.fakeid, cred.cookie, cred.token);
+      result = await tryFetchArticles(account.fakeid, cred.cookie, cred.token, cred.authKey);
       if (result !== null) break;
       console.log(`[Monitor] ${account.nickname}: 凭证过期，尝试下一个...`);
     }

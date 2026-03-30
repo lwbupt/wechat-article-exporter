@@ -2,21 +2,19 @@ import { type CookieEntity } from '~/server/utils/CookieStore';
 
 export type CookieKVKey = string;
 
-export interface CookieKVValue {
+export type CookieKVValue = {
   token: string;
-  authKey: string; // 添加 authKey 字段
+  authKey: string;
   cookies: CookieEntity[];
-}
+};
 
 export async function setMpCookie(key: CookieKVKey, data: CookieKVValue): Promise<boolean> {
   const kv = useStorage('kv');
   try {
-    // 确保 authKey 字段存在
     if (!data.authKey) {
       data.authKey = key;
     }
     await kv.set<CookieKVValue>(`cookie:${key}`, data, {
-      // https://developers.cloudflare.com/kv/api/write-key-value-pairs/#expiring-keys
       expirationTtl: 60 * 60 * 24 * 4, // 4 days
     });
     return true;
@@ -30,21 +28,15 @@ export async function getMpCookie(key: CookieKVKey): Promise<CookieKVValue | nul
   const kv = useStorage('kv');
   const cookie = await kv.get<CookieKVValue>(`cookie:${key}`);
 
-  // 兼容旧数据：如果没有 authKey 字段，自动补充并更新
   if (cookie && !cookie.authKey) {
     cookie.authKey = key;
-    // 异步更新存储，无需等待
-    setMpCookie(key, cookie).catch(err => {
-      console.error('Failed to update cookie with authKey:', err);
-    });
   }
-
   return cookie;
 }
 
 /**
- * 获取所有已保存的登录信息（包含 auth-key）
- * 兼容旧数据格式（没有 authKey 字段的情况）
+ * 获取所有已保存的登录信息（包含 auth-key)
+ * 兼容旧数据格式（没有 authKey 字段的情况)
  */
 export async function getAllMpCookies(): Promise<CookieKVValue[]> {
   const kv = useStorage('kv');
@@ -54,7 +46,6 @@ export async function getAllMpCookies(): Promise<CookieKVValue[]> {
   for (const key of keys) {
     const cookie = await kv.get<CookieKVValue>(key);
     if (cookie) {
-      // 兼容旧数据：如果没有 authKey，使用 token 的前10位作为临时的 authKey
       if (!cookie.authKey) {
         const authKey = key.replace('cookie:', '');
         if (authKey) {

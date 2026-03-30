@@ -50,13 +50,29 @@ export class AccountCookie {
     return this._token;
   }
 
-  // 根据 cookie 中的 expires 来确定是否已过期
-  public get isExpired(): boolean {
-    // todo
-    return false;
+  /**
+   * 合并新的 set-cookie 数据到已有数据（按 name 合并：新值覆盖旧值)
+   * 过滤 value='EXPIRED' 的不保留
+   */
+  public updateCookies(newCookies: CookieEntity[]): void {
+    const cookieMap = new Map<string, CookieEntity>();
+    for (const c of this._cookie) {
+      cookieMap.set(c.name as string, c);
+    }
+    for (const nc of newCookies) {
+      if (nc.value === 'EXPIRED') {
+        cookieMap.delete(nc.name as string);
+      } else {
+        cookieMap.set(nc.name as string, nc);
+      }
+    }
+    this._cookie = Array.from(cookieMap.values());
   }
 
-  public static parse(cookies: string[]): CookieEntity[] {
+  /**
+   * 解析 set-cookie 字符串数组为 CookieEntity[]
+   */
+  static parse(cookies: string[]): CookieEntity[] {
     // key 为 cookie 的 name
     const cookieMap = new Map<string, CookieEntity>();
 
@@ -75,8 +91,8 @@ export class AccountCookie {
 
         // 处理其他属性（如Expires, Path, Domain等）
         for (const part of parts.slice(1)) {
-          const [key, ...valueParts] = part.split('=');
-          const value = valueParts.join('=').trim(); // 处理值中可能包含的等号
+          const [key, ...vParts] = part.split('=');
+          const value = vParts.join('=').trim(); // 处理值中可能包含的等号
           if (key) {
             const keyLower = key.toLowerCase();
             cookieObj[keyLower] = value || 'true'; // 无值属性（如HttpOnly）设为true
@@ -140,6 +156,7 @@ class CookieStore {
     }
 
     cachedAccountCookie = AccountCookie.create(cookieValue.token, cookieValue.cookies);
+    cachedAccountCookie.setAuthKey(authKey);
     this.evictIfNeeded();
     this.store.set(authKey, cachedAccountCookie);
 
@@ -176,11 +193,31 @@ class CookieStore {
   }
 
   /**
+   * 合并微信响应返回的新 set-cookie 到已有凭证中并写回 KV（用于自动保活 session）
+   * @param authKey 登录凭证 key
+   * @param newRawCookies 微信响应的 set-cookie 字符串数组
+   */
+  async updateCookie(authKey: string, newRawCookies: string[]): Promise<boolean> {
+    const accountCookie = await this.getAccountCookie(authKey);
+    if (!accountCookie) return false;
+
+    // 解析新的 set-cookie 并合并
+    const parsedNew = AccountCookie.parse(newRawCookies);
+    accountCookie.updateCookies(parsedNew);
+
+    // 写回内存和 KV
+    this.store.set(authKey, accountCookie);
+    return await setMpCookie(authKey, accountCookie.toJSON());
+  }
+
+  /**
    * 移除用户的 cookie（用于登出等场景）
    * @param authKey
    */
-  removeCookie(authKey: string): void {
+  async removeCookie(authKey: string): Promise<void> {
     this.store.delete(authKey);
+    const kv = useStorage('kv');
+    await kv.remove(`cookie:${authKey}`);
   }
 
   /**

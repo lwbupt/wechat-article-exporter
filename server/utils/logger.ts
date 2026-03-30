@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const logFilePath = path.resolve(__dirname, '.data/request.log');
+// 日志目录，支持 LOG_DIR 环境变量，默认 ./data/logs
+const logDir = path.resolve(process.cwd(), process.env.LOG_DIR || './data/logs');
+const logFilePath = path.join(logDir, 'request.log');
 
 // 写入日志文件
 function logToFile(prefix: string, message: string) {

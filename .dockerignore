@@ -22,10 +22,17 @@ node_modules
 .DS_Store
 .idea
 .data
+data
 
 design
 docs
 nuxt-options.json
+
+# Claude Code / AI tools
+.agents
+.claude
+.windsurf
+skills-lock.json
 
 # wrangler
 .wrangler

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  wechat-exporter:
+    image: wechat-article-exporter:latest
+    container_name: wechat-exporter
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # 所有数据统一挂载：数据库 + KV + 日志
+      - ./data:/app/data
+    # 从 .env 文件读取配置，不在此处硬编码
+    env_file:
+      - .env
+    environment:
+      # 运行模式固定为生产
+      - NODE_ENV=production
+      # Linux 容器必须监听所有网卡
+      - HOST=0.0.0.0
+    restart: unless-stopped

@@ -23,7 +23,7 @@ import GridStatusBar from '~/components/grid/StatusBar.vue';
 import AccountSelectorForArticle from '~/components/selector/AccountSelectorForArticle.vue';
 import { isDev, websiteName } from '~/config';
 import { sharedGridOptions } from '~/config/shared-grid-options';
-import { articleDeleted, getArticleCache, updateArticleStatus } from '~/store/v2/article';
+import { articleDeleted, getArticleCache, updateArticleDownload, updateArticleStatus } from '~/store/v2/article';
 import { getDebugCache } from '~/store/v2/debug';
 import { type MpAccount } from '~/store/v2/info';
 import ConfirmModal from '~/components/modal/Confirm.vue';
@@ -395,7 +395,7 @@ const {
       article._status = '正常';
       updateRow(article);
 
-      updateArticleStatus(url, '正常');
+      updateArticleStatus(url, '正常', { contentDownload: true });
 
       // 修复之前代码逻辑错误导致的数据库状态被误设置为【已删除】
       article.is_deleted = false;
@@ -437,11 +437,13 @@ const {
         // 如果同步下载文章内容，则更新相关字段
         article.contentDownload = true;
         article._status = '正常';
-        updateArticleStatus(url, '正常');
+        updateArticleStatus(url, '正常', { contentDownload: true, metadataDownload: true });
 
         // 修复之前代码逻辑错误导致的数据库状态被误设置为【已删除】
         article.is_deleted = false;
         articleDeleted(url, false);
+      } else {
+        updateArticleDownload(url, { metadataDownload: true });
       }
 
       updateRow(article);
@@ -454,6 +456,8 @@ const {
     if (article) {
       article.commentDownload = true;
       updateRow(article);
+
+      updateArticleDownload(url, { commentDownload: true });
     } else {
       console.warn(`${url} not found in table data when update commentDownload`);
     }

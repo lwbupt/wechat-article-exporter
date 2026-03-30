@@ -10,9 +10,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 数据库文件路径
-const dataDir = path.join(process.cwd(), 'data');
-const dbPath = path.join(dataDir, 'wechat.db');
+// 数据库文件路径，支持通过环境变量配置
+const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'wechat.db');
+const dataDir = path.dirname(dbPath);
 
 // 确保数据目录存在
 if (!fs.existsSync(dataDir)) {
@@ -41,8 +41,25 @@ db.pragma('temp_store = MEMORY');
  * 初始化数据库表结构
  */
 export function initDatabase(): void {
-  // 使用 process.cwd() 获取项目根目录，避免 Nuxt 编译路径问题
-  const schemaPath = path.join(process.cwd(), 'server/database/schema.sql');
+  // 开发环境: process.cwd()/server/database/schema.sql
+  // 生产构建: process.cwd()/server/database/schema.sql (Dockerfile 中 COPY)
+  const possibleSchemaPaths = [
+    path.join(process.cwd(), 'server/database/schema.sql'),
+    path.join(__dirname, 'database/schema.sql'),
+  ];
+
+  let schemaPath = '';
+  for (const p of possibleSchemaPaths) {
+    if (fs.existsSync(p)) {
+      schemaPath = p;
+      break;
+    }
+  }
+
+  if (!schemaPath) {
+    throw new Error(`schema.sql not found. Tried: ${possibleSchemaPaths.join(', ')}`);
+  }
+
   const schema = fs.readFileSync(schemaPath, 'utf-8');
 
   // 分割 SQL 语句 - 处理包含 BEGIN...END 的触发器
@@ -175,15 +192,57 @@ function runMigrations(): void {
         CREATE TABLE IF NOT EXISTS categories (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           name TEXT NOT NULL UNIQUE,
+          parent_id INTEGER DEFAULT NULL,
+          sort_order INTEGER DEFAULT 0,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
       // 插入预定义分类
-      const defaultCategories = ['科技', '财经', '教育', '健康', '娱乐', '文化', '政治', '生活', '其他'];
-      const insertStmt = db.prepare('INSERT OR IGNORE INTO categories (name) VALUES (?)');
+      const defaultCategories = [
+        { name: '科技' },
+        { name: '财经' },
+        { name: '教育' },
+        { name: '健康' },
+        { name: '娱乐' },
+        { name: '文化' },
+        { name: '政治' },
+        { name: '生活' },
+        { name: '其他' },
+      ];
+      const insertStmt = db.prepare('INSERT OR IGNORE INTO categories (name, parent_id, sort_order) VALUES (?, ?, ?)');
       for (const cat of defaultCategories) {
-        insertStmt.run(cat);
+        insertStmt.run(cat.name, cat.parent_id, cat.sort_order);
       }
+
+      // 二插入二级分类
+      const subCategories = [
+        { name: 'AI', parentId: 1 }, // 科技
+        { name: '互联网', parentId: 1 },
+        { name: '编程', parentId: 1 }, // 科技
+        { name: '贷款', parentId: 2 }, // 财经
+        { name: '理财', parentId: 2 }, // 财经
+        { name: 'K12教育', parentId: 3 }, // 教育
+        { name: '医疗健康', parentId: 4 }, // 健康
+        { name: '影视音乐', parentId: 5 }, // 娱乐
+        { name: '传统文化', parentId: 6 }, // 文化
+        { name: '热门美食', parentId: 7 }, // 生活
+      ];
+      const insertSubStmt = db.prepare('INSERT OR IGNORE INTO categories (name, parent_id, sort_order) VALUES (?, ?, ?)');
+      for (const cat of subCategories) {
+        insertSubStmt.run(cat.name, cat.parentId, cat.sort_order);
+      }
+    } else {
+      // categories 表已存在，检查是否需要添加 parent_id 和 sort_order 字段
+      const columns = (db.pragma('table_info(categories)') as Array<{ name: string }>).map(col => col.name);
+      if (!columns.includes('parent_id')) {
+        console.log('[Migration] Adding parent_id and sort_order columns to categories table');
+        db.exec('ALTER TABLE categories ADD COLUMN parent_id INTEGER DEFAULT NULL');
+        db.exec('ALTER TABLE categories ADD COLUMN sort_order INTEGER DEFAULT 0');
+
+        // 緻加唯一索引
+        db.exec('CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id)');
+      }
+
     }
 
     // 创建 monitor_logs 表（如果不存在）
