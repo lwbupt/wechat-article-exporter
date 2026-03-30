@@ -17,6 +17,8 @@ export interface MpAccount {
   create_time?: number;
   update_time?: number;
   last_update_time?: number;
+  category?: string;
+  is_monitored?: boolean;
 }
 
 /**
@@ -27,8 +29,9 @@ export function insertAccountIfNotExists(account: MpAccount): void {
     INSERT OR IGNORE INTO mp_accounts (
       fakeid, nickname, round_head_img, signature, service_type,
       completed, count, articles, total_count,
-      create_time, update_time, last_update_time
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      create_time, update_time, last_update_time,
+      category, is_monitored
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -43,7 +46,9 @@ export function insertAccountIfNotExists(account: MpAccount): void {
     account.total_count || 0,
     account.create_time || null,
     account.update_time || null,
-    account.last_update_time || null
+    account.last_update_time || null,
+    account.category || null,
+    account.is_monitored ? 1 : 0
   );
 }
 
@@ -55,8 +60,9 @@ export function upsertAccount(account: MpAccount): void {
     INSERT INTO mp_accounts (
       fakeid, nickname, round_head_img, signature, service_type,
       completed, count, articles, total_count,
-      create_time, update_time, last_update_time
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      create_time, update_time, last_update_time,
+      category, is_monitored
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(fakeid) DO UPDATE SET
       nickname = excluded.nickname,
       round_head_img = excluded.round_head_img,
@@ -67,7 +73,9 @@ export function upsertAccount(account: MpAccount): void {
       articles = excluded.articles,
       total_count = excluded.total_count,
       update_time = excluded.update_time,
-      last_update_time = excluded.last_update_time
+      last_update_time = excluded.last_update_time,
+      category = COALESCE(excluded.category, mp_accounts.category),
+      is_monitored = COALESCE(excluded.is_monitored, mp_accounts.is_monitored)
   `);
 
   stmt.run(
@@ -82,7 +90,9 @@ export function upsertAccount(account: MpAccount): void {
     account.total_count || 0,
     account.create_time || null,
     account.update_time || null,
-    account.last_update_time || null
+    account.last_update_time || null,
+    account.category || null,
+    account.is_monitored ? 1 : 0
   );
 }
 
@@ -337,4 +347,20 @@ export function updateAccountStats(
   values.push(fakeid);
   const stmt = db.prepare(`UPDATE mp_accounts SET ${updates.join(', ')} WHERE fakeid = ?`);
   stmt.run(...values);
+}
+
+/**
+ * 更新公众号的类别
+ */
+export function updateAccountCategory(fakeid: string, category: string | null): void {
+  const stmt = db.prepare('UPDATE mp_accounts SET category = ? WHERE fakeid = ?');
+  stmt.run(category, fakeid);
+}
+
+/**
+ * 更新公众号的监控状态
+ */
+export function updateAccountMonitored(fakeid: string, isMonitored: boolean): void {
+  const stmt = db.prepare('UPDATE mp_accounts SET is_monitored = ? WHERE fakeid = ?');
+  stmt.run(isMonitored ? 1 : 0, fakeid);
 }

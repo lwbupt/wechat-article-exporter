@@ -11,6 +11,8 @@ interface SaveAccountBody {
   round_head_img: string;
   signature: string;
   service_type: number;
+  category?: string;
+  is_monitored?: boolean;
 }
 
 export default defineEventHandler(async event => {
@@ -31,6 +33,8 @@ export default defineEventHandler(async event => {
       round_head_img: body.round_head_img,
       signature: body.signature,
       service_type: body.service_type,
+      category: body.category,
+      is_monitored: body.is_monitored,
     });
 
     return {

@@ -20,6 +20,9 @@ export interface Preferences {
 
   syncDateRange: '1d' | '3d' | '7d' | '1m' | '3m' | '6m' | '1y' | 'all' | 'point';
   syncDatePoint: number;
+
+  // 定时监控配置
+  monitorEnabled: boolean;
 }
 
 interface ExportConfig {

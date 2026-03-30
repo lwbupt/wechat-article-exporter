@@ -48,7 +48,7 @@ export const sharedGridOptions: GridOptions = {
   defaultColDef: {
     sortable: true,
     filter: true,
-    flex: 1,
+    resizable: true,
     enableCellChangeFlash: false,
     suppressHeaderMenuButton: true,
     suppressHeaderContextMenu: true,

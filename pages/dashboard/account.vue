@@ -240,6 +240,42 @@ const columnDefs = ref<ColDef[]>([
     minWidth: 200,
   },
   {
+    colId: 'category',
+    headerName: '账号类别',
+    field: 'category',
+    cellDataType: 'text',
+    filter: 'agTextColumnFilter',
+    minWidth: 150,
+    cellClass: 'flex justify-center items-center',
+    cellRenderer: (params: ICellRendererParams) => {
+      return `<span class="category-cell" style="cursor:pointer;color:${params.value ? '#1d4ed8' : '#9ca3af'}">${params.value || '未分类'}</span>`;
+    },
+    onCellClicked: (params: any) => {
+      if (params.colDef.colId === 'category') {
+        editCategory(params.data);
+      }
+    },
+  },
+  {
+    colId: 'is_monitored',
+    headerName: '监控',
+    field: 'is_monitored',
+    cellDataType: 'boolean',
+    filter: 'agSetColumnFilter',
+    filterParams: createBooleanColumnFilterParams('监控中', '未监控'),
+    minWidth: 100,
+    cellClass: 'flex justify-center items-center',
+    cellRenderer: (params: ICellRendererParams) => {
+      const checked = params.value ? 'checked' : '';
+      return `<input type="checkbox" ${checked} class="monitor-checkbox" data-fakeid="${params.data.fakeid}" style="width:16px;height:16px;cursor:pointer" />`;
+    },
+    onCellClicked: (params: any) => {
+      if (params.colDef.colId === 'is_monitored') {
+        toggleMonitored(params.data);
+      }
+    },
+  },
+  {
     colId: 'create_time',
     headerName: '添加时间',
     field: 'create_time',
@@ -372,6 +408,7 @@ function onGridReady(params: GridReadyEvent) {
 
   restoreColumnState();
   refresh();
+  loadCategories();
 }
 
 function onColumnStateChange() {
@@ -502,6 +539,77 @@ function exportAccount() {
 }
 
 const { getActualDateRange } = useSyncDeadline();
+
+// 公众号类别列表（从后端动态加载）
+const categoryOptions = ref<string[]>([]);
+
+async function loadCategories() {
+  try {
+    const resp = await $fetch<{ success: boolean; data: Array<{ name: string }> }>('/api/query/categories');
+    if (resp?.success && resp.data) {
+      categoryOptions.value = resp.data.map(c => c.name);
+    }
+  } catch (error) {
+    console.error('Failed to load categories:', error);
+  }
+}
+
+// 编辑公众号类别
+const categoryModalVisible = ref(false);
+const categoryInput = ref('');
+const categoryEditAccount = ref<MpAccount | null>(null);
+
+function editCategory(account: MpAccount) {
+  categoryEditAccount.value = account;
+  categoryInput.value = account.category || '';
+  categoryModalVisible.value = true;
+}
+
+async function confirmCategory(category: string) {
+  if (!categoryEditAccount.value) return;
+  const account = categoryEditAccount.value;
+  try {
+    // 更新公众号类别
+    await $fetch('/api/query/account/update-field', {
+      method: 'POST',
+      body: { fakeid: account.fakeid, field: 'category', value: category },
+    });
+
+    // 如果是自定义类别（不在已有列表中），添加到分类表
+    if (category && !categoryOptions.value.includes(category)) {
+      await $fetch('/api/query/categories', {
+        method: 'POST',
+        body: { name: category },
+      });
+      categoryOptions.value.push(category);
+    }
+
+    account.category = category || undefined;
+    const rowNode = gridApi.value?.getRowNode(account.fakeid);
+    if (rowNode) rowNode.updateData({ ...account });
+  } catch (error) {
+    console.error('Failed to update category:', error);
+    toast.error('更新失败', '更新公众号类别失败');
+  }
+  categoryModalVisible.value = false;
+}
+
+// 切换监控状态
+async function toggleMonitored(account: MpAccount) {
+  const newValue = !account.is_monitored;
+  try {
+    await $fetch('/api/query/account/update-field', {
+      method: 'POST',
+      body: { fakeid: account.fakeid, field: 'is_monitored', value: newValue },
+    });
+    account.is_monitored = newValue;
+    const rowNode = gridApi.value?.getRowNode(account.fakeid);
+    if (rowNode) rowNode.updateData({ ...account });
+  } catch (error) {
+    console.error('Failed to toggle monitored:', error);
+    toast.error('更新失败', '更新监控状态失败');
+  }
+}
 </script>
 
 <template>
@@ -569,5 +677,39 @@ const { getActualDateRange } = useSyncDeadline();
 
     <!-- 添加公众号弹框 -->
     <GlobalSearchAccountDialog ref="searchAccountDialogRef" @select:account="onSelectAccount" />
+
+    <!-- 类别编辑弹窗 -->
+    <UModal v-model="categoryModalVisible">
+      <UCard>
+        <template #header>
+          <span class="font-semibold">设置公众号类别</span>
+        </template>
+        <div class="flex flex-col gap-3">
+          <div class="flex flex-wrap gap-2">
+            <UButton
+              v-for="opt in categoryOptions"
+              :key="opt"
+              :color="categoryInput === opt ? 'primary' : 'white'"
+              size="sm"
+              @click="categoryInput = opt"
+            >
+              {{ opt }}
+            </UButton>
+          </div>
+          <UInput v-model="categoryInput" placeholder="输入自定义类别" />
+        </div>
+        <template #footer>
+          <div class="flex justify-end gap-2">
+            <UButton color="white" @click="categoryModalVisible = false">取消</UButton>
+            <UButton
+              color="primary"
+              @click="confirmCategory(categoryInput)"
+            >
+              确定
+            </UButton>
+          </div>
+        </template>
+      </UCard>
+    </UModal>
   </div>
 </template>

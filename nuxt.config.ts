@@ -36,6 +36,9 @@ export default defineNuxtConfig({
   },
   nitro: {
     minify: process.env.NODE_ENV === 'production',
+    externals: {
+      external: ['better-sqlite3', 'bindings', 'file-uri-to-path'],
+    },
     storage: {
       kv: {
         // 开发环境使用文件存储，避免重启丢失登录状态

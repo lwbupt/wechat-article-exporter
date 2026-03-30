@@ -26,6 +26,7 @@ import { sharedGridOptions } from '~/config/shared-grid-options';
 import { articleDeleted, getArticleCache, updateArticleStatus } from '~/store/v2/article';
 import { getDebugCache } from '~/store/v2/debug';
 import { type MpAccount } from '~/store/v2/info';
+import ConfirmModal from '~/components/modal/Confirm.vue';
 import { type Metadata } from '~/store/v2/metadata';
 import type { Preferences } from '~/types/preferences';
 import type { AppMsgExWithFakeID } from '~/types/types';
@@ -488,6 +489,48 @@ function copyWechatLink() {
     copied.value = false;
   }, 1000);
 }
+
+// 是否有选中行
+const hasSelectedRows = computed(() => selectedArticles.value.length > 0);
+
+// 删除选中文章
+const isDeletingArticles = ref(false);
+const modal = useModal();
+
+function deleteSelectedArticles() {
+  const articles = selectedArticles.value;
+  modal.open(ConfirmModal, {
+    title: `确定要删除选中的 ${articles.length} 篇文章吗？`,
+    description: '删除后，文章及其关联的 HTML 内容、评论、元数据等数据都将被永久删除，无法恢复。',
+    async onConfirm() {
+      try {
+        isDeletingArticles.value = true;
+
+        const articlesToDelete = articles.map(a => ({
+          fakeid: a.fakeid,
+          aid: a.aid,
+        }));
+
+        const resp = await $fetch('/api/query/article/delete', {
+          method: 'POST',
+          body: { articles: articlesToDelete },
+        });
+
+        if ((resp as any)?.success) {
+          // 从表格数据中移除已删除的文章
+          const deletedLinks = new Set(articles.map(a => a.link));
+          globalRowData = globalRowData.filter(a => !deletedLinks.has(a.link));
+          gridApi.value?.setGridOption('rowData', globalRowData);
+          gridApi.value?.deselectAll();
+        }
+      } catch (error) {
+        console.error('Failed to delete articles:', error);
+      } finally {
+        isDeletingArticles.value = false;
+      }
+    },
+  });
+}
 </script>
 
 <template>
@@ -505,6 +548,15 @@ function copyWechatLink() {
           </div>
         </div>
         <div class="flex items-center space-x-2">
+          <UButton
+            color="rose"
+            icon="i-lucide:trash-2"
+            :loading="isDeletingArticles"
+            :disabled="!hasSelectedRows"
+            @click="deleteSelectedArticles"
+          >
+            删除
+          </UButton>
           <UButton v-if="downloadBtnLoading" color="black" @click="stopDownload">停止</UButton>
           <ButtonGroup
             :items="[

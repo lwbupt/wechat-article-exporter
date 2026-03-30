@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS mp_accounts (
     create_time INTEGER,
     update_time INTEGER,
     last_update_time INTEGER,
+    category TEXT,
+    is_monitored BOOLEAN DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -185,6 +187,37 @@ CREATE INDEX IF NOT EXISTS idx_comments_download_time ON comments(download_time)
 CREATE INDEX IF NOT EXISTS idx_assets_fakeid ON assets(fakeid);
 CREATE INDEX IF NOT EXISTS idx_article_resources_article_id ON article_resources(article_id);
 CREATE INDEX IF NOT EXISTS idx_api_logs_call_time ON api_logs(call_time DESC);
+
+-- 分类表（存储自定义公众号分类）
+CREATE TABLE IF NOT EXISTS categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 插入预定义分类
+INSERT OR IGNORE INTO categories (name) VALUES ('科技');
+INSERT OR IGNORE INTO categories (name) VALUES ('财经');
+INSERT OR IGNORE INTO categories (name) VALUES ('教育');
+INSERT OR IGNORE INTO categories (name) VALUES ('健康');
+INSERT OR IGNORE INTO categories (name) VALUES ('娱乐');
+INSERT OR IGNORE INTO categories (name) VALUES ('文化');
+INSERT OR IGNORE INTO categories (name) VALUES ('政治');
+INSERT OR IGNORE INTO categories (name) VALUES ('生活');
+INSERT OR IGNORE INTO categories (name) VALUES ('其他');
+
+-- 监控日志表
+CREATE TABLE IF NOT EXISTS monitor_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fakeid TEXT NOT NULL,
+    nickname TEXT,
+    avatar TEXT,
+    check_time INTEGER NOT NULL,
+    new_count INTEGER DEFAULT 0,
+    new_titles TEXT,
+    error TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
 -- 创建触发器：自动更新 updated_at
 CREATE TRIGGER IF NOT EXISTS update_mp_accounts_timestamp

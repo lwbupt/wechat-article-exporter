@@ -28,6 +28,8 @@ export function syncAccount(account: any): void {
       create_time: account.create_time,
       update_time: account.update_time,
       last_update_time: account.last_update_time,
+      category: account.category,
+      is_monitored: account.is_monitored,
     });
   } catch (error) {
     console.error('Failed to sync account:', error);

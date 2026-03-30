@@ -151,6 +151,62 @@ function runMigrations(): void {
       db.exec('ALTER TABLE articles ADD COLUMN is_hot BOOLEAN DEFAULT 0');
     }
 
+    // 检查 mp_accounts 表的新字段
+    const mpAccountsTableInfo = db.pragma('table_info(mp_accounts)') as Array<{ name: string }>;
+    const mpAccountsColumns = mpAccountsTableInfo.map(col => col.name);
+
+    if (!mpAccountsColumns.includes('category')) {
+      console.log('[Migration] Adding category column to mp_accounts table');
+      db.exec('ALTER TABLE mp_accounts ADD COLUMN category TEXT');
+    }
+
+    if (!mpAccountsColumns.includes('is_monitored')) {
+      console.log('[Migration] Adding is_monitored column to mp_accounts table');
+      db.exec('ALTER TABLE mp_accounts ADD COLUMN is_monitored BOOLEAN DEFAULT 0');
+    }
+
+    // 创建 categories 表（如果不存在）
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='categories'")
+      .get();
+    if (!tables) {
+      console.log('[Migration] Creating categories table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS categories (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      // 插入预定义分类
+      const defaultCategories = ['科技', '财经', '教育', '健康', '娱乐', '文化', '政治', '生活', '其他'];
+      const insertStmt = db.prepare('INSERT OR IGNORE INTO categories (name) VALUES (?)');
+      for (const cat of defaultCategories) {
+        insertStmt.run(cat);
+      }
+    }
+
+    // 创建 monitor_logs 表（如果不存在）
+    const monitorLogsTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='monitor_logs'")
+      .get();
+    if (!monitorLogsTable) {
+      console.log('[Migration] Creating monitor_logs table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS monitor_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          fakeid TEXT NOT NULL,
+          nickname TEXT,
+          avatar TEXT,
+          check_time INTEGER NOT NULL,
+          new_count INTEGER DEFAULT 0,
+          new_titles TEXT,
+          error TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    }
+
     // 检查 article_html 表的字段
     const htmlTableInfo = db.pragma('table_info(article_html)') as Array<{ name: string }>;
     const htmlColumns = htmlTableInfo.map(col => col.name);

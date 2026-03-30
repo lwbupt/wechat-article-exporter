@@ -13,6 +13,7 @@ export default defineEventHandler(async event => {
     const filter = {
       nickname: (query.nickname as string)?.trim(),
       fakeid: (query.fakeid as string)?.trim(),
+      is_monitored: query.is_monitored === '1' ? true : query.is_monitored === '0' ? false : undefined,
     };
 
     // 分页参数
@@ -33,6 +34,9 @@ export default defineEventHandler(async event => {
     }
     if (filter.fakeid) {
       accounts = accounts.filter(acc => acc.fakeid === filter.fakeid);
+    }
+    if (filter.is_monitored !== undefined) {
+      accounts = accounts.filter(acc => !!acc.is_monitored === filter.is_monitored);
     }
 
     // 应用排序

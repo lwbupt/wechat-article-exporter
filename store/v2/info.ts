@@ -21,6 +21,11 @@ export interface MpAccount {
 
   // 最后更新时间
   last_update_time?: number;
+
+  // 账号类别
+  category?: string;
+  // 是否监控
+  is_monitored?: boolean;
 }
 
 interface ApiResponse<T> {
