@@ -25,8 +25,8 @@ const db = new Database(dbPath);
 // 启用 WAL 模式 (Write-Ahead Logging) 提高并发性能
 db.pragma('journal_mode = WAL');
 
-// 启用外键约束
-db.pragma('foreign_keys = ON');
+// 关闭外键约束（单篇文章下载时 fakeid 可能尚未关联到 mp_accounts）
+db.pragma('foreign_keys = OFF');
 
 // 设置同步模式 (NORMAL 平衡性能和安全)
 db.pragma('synchronous = NORMAL');

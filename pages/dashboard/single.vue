@@ -55,6 +55,7 @@ interface SingleArticleRow extends Partial<ArticleMetadata> {
   accountName?: string | null;
   _status: string;
   is_deleted: boolean;
+  is_hot?: boolean;
 }
 
 const preferences = usePreferences();
@@ -62,9 +63,74 @@ const preferences = usePreferences();
 const toast = toastFactory();
 const inputUrl = ref('');
 
-const globalRowData = useLocalStorage<SingleArticleRow[]>('single-article:rows', []);
-if (!globalRowData.value) {
-  globalRowData.value = [];
+// 分页状态
+const currentPage = ref(1);
+const pageSize = ref(20);
+const totalItems = ref(0);
+const totalPages = ref(0);
+const loadingHotArticles = ref(false);
+
+// 全局行数据：来自后端的热门文章 + 本地新增的文章
+const globalRowData = ref<SingleArticleRow[]>([]);
+
+async function fetchHotArticles() {
+  loadingHotArticles.value = true;
+  try {
+    const resp = await $fetch<{
+      success: boolean;
+      data: any[];
+      pagination: { total: number; page: number; limit: number; totalPages: number };
+    }>('/api/query/articles/hot', {
+      query: {
+        page: currentPage.value,
+        limit: pageSize.value,
+      },
+    });
+
+    if (resp.success) {
+      totalItems.value = resp.pagination.total;
+      totalPages.value = resp.pagination.totalPages;
+
+      // 将后端数据映射为前端行数据
+      const serverRows: SingleArticleRow[] = resp.data.map(article => ({
+        id: `${article.fakeid}:${article.aid}`,
+        fakeid: article.fakeid,
+        link: article.link,
+        title: article.title || '未命名文章',
+        author_name: article.author_name || '--',
+        digest: article.digest || '',
+        cover: article.cover,
+        create_time: article.create_time || article.datetime || 0,
+        update_time: article.update_time || article.datetime || 0,
+        appmsgid: 0,
+        itemidx: article.itemidx || 1,
+        aid: article.aid,
+        contentDownload: article.contentDownload || article.content_download || false,
+        commentDownload: article.commentDownload || article.comment_download || false,
+        accountName: null,
+        _status: article._status || '',
+        is_deleted: article.is_deleted || false,
+        is_hot: true,
+        readNum: article.readNum || 0,
+        oldLikeNum: article.oldLikeNum || 0,
+        likeNum: article.likeNum || 0,
+        shareNum: article.shareNum || 0,
+        commentNum: article.commentNum || 0,
+      }));
+
+      globalRowData.value = serverRows;
+    }
+  } catch (error) {
+    console.error('Failed to fetch hot articles:', error);
+  } finally {
+    loadingHotArticles.value = false;
+  }
+}
+
+function goToPage(page: number) {
+  if (page < 1 || page > totalPages.value) return;
+  currentPage.value = page;
+  fetchHotArticles();
 }
 
 const columnDefs = ref<ColDef[]>([
@@ -248,10 +314,8 @@ watch(
 );
 
 onMounted(async () => {
-  // 将本地存储的文章保存到后端数据库
-  for (const row of globalRowData.value) {
-    await upsertArticleStub(row);
-  }
+  // 从后端加载 is_hot 文章
+  await fetchHotArticles();
 });
 
 function normalizeUrl(url: string) {
@@ -328,13 +392,11 @@ function parseUrlParams(url: string) {
 function createRow(url: string): SingleArticleRow {
   const { fakeid, mid, idx, uniqueId } = parseUrlParams(url);
   const timestamp = dayjs().unix();
-  const aid = uniqueId; // 使用 uniqueId 作为 aid
-  const generatedId =
-    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random()}`;
+  const aid = uniqueId;
+  // 使用 fakeid:aid 作为稳定 ID，与后端返回格式一致
+  const id = `${fakeid}:${aid}`;
   return {
-    id: generatedId,
+    id,
     fakeid,
     link: url,
     title: '未命名文章',
@@ -350,19 +412,21 @@ function createRow(url: string): SingleArticleRow {
     accountName: null,
     _status: '',
     is_deleted: false,
+    is_hot: true,
   };
 }
 
 async function addArticle() {
   try {
     const normalized = normalizeUrl(inputUrl.value);
+    // 检查当前页和本地新增是否已有该链接
     if (globalRowData.value.some(row => row.link === normalized)) {
       toast.info('提示', '该链接已存在列表中');
       return;
     }
     const row = createRow(normalized);
     globalRowData.value = [row, ...globalRowData.value];
-    await upsertArticleStub(row); // 现在是异步函数
+    // 不在下载前保存到后端，下载成功后再保存
     refreshGrid();
     inputUrl.value = '';
     await downloadRows([row], { silent: true });
@@ -433,6 +497,34 @@ async function upsertArticleStub(row: SingleArticleRow) {
   }
 
   return frontendResult;
+}
+
+/**
+ * 将文章的最新字段同步到后端 SQLite（标题、作者、摘要、封面、发布时间等）
+ */
+async function syncArticleToBackend(row: SingleArticleRow) {
+  try {
+    await $fetch('/api/query/article/save', {
+      method: 'POST',
+      body: {
+        fakeid: row.fakeid,
+        aid: row.aid,
+        title: row.title,
+        link: row.link,
+        author_name: row.author_name,
+        digest: row.digest,
+        cover: row.cover,
+        create_time: row.create_time,
+        update_time: row.update_time,
+        itemidx: row.itemidx,
+        _status: row._status,
+        content_download: row.contentDownload,
+        comment_download: row.commentDownload,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to sync article to backend:', error);
+  }
 }
 
 function getSelectedRows(): SingleArticleRow[] {
@@ -559,13 +651,6 @@ async function downloadRows(targetRows: SingleArticleRow[], options: { silent?: 
     return;
   }
 
-  await Promise.all(
-    targetRows.map(async row => {
-      updateRow(row);
-      await upsertArticleStub(row);
-    })
-  );
-
   const urls = targetRows.map(row => row.link);
   await download('html', urls);
 }
@@ -616,6 +701,9 @@ async function updateRowFromHtml(row: SingleArticleRow) {
     },
     `${row.fakeid}:${row.aid}`
   );
+
+  // 同步更新到后端 SQLite 数据库，确保刷新后数据不丢失
+  await syncArticleToBackend(row);
 }
 
 /**
@@ -718,6 +806,12 @@ const {
 } = useExporter();
 
 async function deleteRowData(row: SingleArticleRow) {
+  // 先删除后端 SQLite 数据库记录（CASCADE 会删除关联的 html、metadata、comments 等）
+  await $fetch('/api/query/article/delete', {
+    method: 'POST',
+    body: { articles: [{ fakeid: row.fakeid, aid: row.aid }] },
+  });
+  // 后端成功后，清理前端 IndexedDB 缓存
   const key = `${row.fakeid}:${row.aid}`;
   await db.transaction('rw', ['article', 'html'], async () => {
     await db.article.delete(key);
@@ -733,9 +827,9 @@ async function removeRows() {
   }
   try {
     await Promise.all(selectedRows.map(row => deleteRowData(row)));
-    globalRowData.value = globalRowData.value.filter(row => !selectedRows.some(sel => sel.id === row.id));
     gridApi.value?.deselectAll();
-    refreshGrid();
+    // 重新加载当前页数据
+    await fetchHotArticles();
     toast.success('移除成功', `已移除 ${selectedRows.length} 篇文章`);
   } catch (error: any) {
     toast.error('移除失败', error?.message || '删除本地缓存时出错');
@@ -757,6 +851,26 @@ async function removeRows() {
           <UButton color="blue" @click="addArticle">添加</UButton>
         </div>
         <div class="flex items-center gap-3">
+          <!-- 分页控件 -->
+          <div v-if="totalPages > 0" class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+            <UButton
+              icon="i-heroicons-chevron-left"
+              variant="ghost"
+              color="gray"
+              size="xs"
+              :disabled="currentPage <= 1 || loadingHotArticles"
+              @click="goToPage(currentPage - 1)"
+            />
+            <span class="whitespace-nowrap">第 {{ currentPage }} / {{ totalPages }} 页 (共 {{ totalItems }} 篇)</span>
+            <UButton
+              icon="i-heroicons-chevron-right"
+              variant="ghost"
+              color="gray"
+              size="xs"
+              :disabled="currentPage >= totalPages || loadingHotArticles"
+              @click="goToPage(currentPage + 1)"
+            />
+          </div>
           <ButtonGroup
             :items="[
               { label: '修复fakeid', event: 'fix-fakeid' },

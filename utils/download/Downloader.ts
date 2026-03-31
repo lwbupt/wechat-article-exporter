@@ -156,26 +156,23 @@ export class Downloader extends BaseDownloader {
       }
     }
 
-    const article = await getArticleByLink(url);
-    if (!article) {
-      this.pending.delete(url);
-      this.failed.add(url);
-      return;
-    }
+    const article = await getArticleByLink(url).catch(() => null);
+    // 单篇文章首次下载时，后端可能还没有文章记录，使用 URL 解析的 fakeid 作为 fallback
+    const fakeid = article?.fakeid || new URL(url).searchParams.get('__biz') || '';
 
     for (let attempt = 0; attempt < this.options.maxRetries; attempt++) {
       const proxy = this.proxyManager.getBestProxy();
 
       try {
-        const blob = await this.download(article.fakeid, url, proxy, false);
+        const blob = await this.download(fakeid, url, proxy, false);
         const html = await blob.text();
         const [status, commentID] = validateHTMLContent(html);
         if (status === 'Success') {
           // 下载成功
           await updateHtmlCache({
-            fakeid: article.fakeid,
+            fakeid,
             url: url,
-            title: article.title,
+            title: article?.title || '',
             file: blob,
             commentID,
           });

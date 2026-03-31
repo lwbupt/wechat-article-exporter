@@ -3,13 +3,26 @@
  * 用于单篇文章下载页面
  */
 
-import { getAccountByFakeid, insertAccountIfNotExists } from '~/server/database/models/account';
 import { upsertArticle } from '~/server/database/models/article';
 
 export default defineEventHandler(async event => {
   try {
     const body = await readBody(event);
-    const { fakeid, aid, title, link, author_name, digest, cover, create_time, update_time, itemidx } = body;
+    const {
+      fakeid,
+      aid,
+      title,
+      link,
+      author_name,
+      digest,
+      cover,
+      create_time,
+      update_time,
+      itemidx,
+      _status,
+      content_download,
+      comment_download,
+    } = body;
 
     if (!fakeid || !aid || !link) {
       return {
@@ -18,15 +31,7 @@ export default defineEventHandler(async event => {
       };
     }
 
-    // 仅在公众号不存在时插入空记录，不覆盖已有数据
-    const existingAccount = getAccountByFakeid(fakeid);
-    if (!existingAccount) {
-      insertAccountIfNotExists({
-        fakeid,
-      });
-    }
-
-    // 保存文章
+    // 保存文章（公众号记录由 tryAddAccountFromHtml 在下载成功后创建）
     upsertArticle({
       fakeid,
       aid,
@@ -35,13 +40,15 @@ export default defineEventHandler(async event => {
       digest: digest || '',
       cover: cover || undefined,
       author_name: author_name || '--',
-      datetime: create_time || Math.floor(Date.now() / 1000),
+      datetime: update_time || create_time || Math.floor(Date.now() / 1000),
       create_time: create_time || Math.floor(Date.now() / 1000),
       link,
       itemidx: itemidx || 1,
-      _status: '',
+      _status: _status ?? '',
       _single: true,
       is_hot: true,
+      content_download: content_download || false,
+      comment_download: comment_download || false,
     });
 
     return {
