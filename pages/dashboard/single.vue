@@ -62,6 +62,7 @@ const preferences = usePreferences();
 
 const toast = toastFactory();
 const inputUrl = ref('');
+const addBtnLoading = ref(false);
 
 // 分页状态
 const currentPage = ref(1);
@@ -318,120 +319,82 @@ onMounted(async () => {
   await fetchHotArticles();
 });
 
-function normalizeUrl(url: string) {
-  const trimmed = url.trim();
-  if (!trimmed) throw new Error('链接不能为空');
-  const hasProtocol = /^https?:\/\//i.test(trimmed);
-  const normalized = hasProtocol ? trimmed : `https://${trimmed}`;
-
-  // 检查是否是有效的微信文章链接
-  const parsed = new URL(normalized);
-  if (parsed.hostname !== 'mp.weixin.qq.com') {
-    throw new Error('请输入有效的公众号文章链接!');
-  }
-
-  // 如果是完整参数链接格式（/s?__biz=...&mid=...&idx=...&sn=...），
-  // 转换为简化格式，只保留核心参数，去掉 hash 片段
-  if (parsed.pathname === '/s' && parsed.searchParams.has('__biz')) {
-    const biz = parsed.searchParams.get('__biz');
-    const mid = parsed.searchParams.get('mid');
-    const idx = parsed.searchParams.get('idx');
-
-    // 构建简化URL：保留核心参数（__biz, mid, idx），去掉 sn 和 hash
-    // hash 片段（#rd）可能导致代理服务器处理问题
-    const params = new URLSearchParams();
-    params.set('__biz', biz);
-    if (mid) params.set('mid', mid);
-    if (idx) params.set('idx', idx);
-
-    const simplifiedUrl = `${parsed.origin}/s?${params.toString()}`;
-
-    console.log('[URL Conversion] 完整参数链接 → 简化链接');
-    console.log('[URL Conversion] 原始:', normalized);
-    console.log('[URL Conversion] 转换后:', simplifiedUrl);
-
-    return simplifiedUrl;
-  }
-
-  // 短链接格式（/s/xxxxx），直接返回
-  const hash = parsed.hash;
-  const baseUrl = parsed.origin + parsed.pathname + parsed.search;
-
-  return hash ? baseUrl + hash : baseUrl;
-}
-
-function parseUrlParams(url: string) {
-  const parsed = new URL(url);
-  const params = parsed.searchParams;
-  const fakeid = params.get('__biz') || 'SINGLE_ARTICLE_FAKEID';
-
-  // 尝试从 URL 参数中获取 mid 和 idx
-  const mid = params.get('mid') || params.get('appmsgid');
-  const idx = params.get('idx') || params.get('itemidx') || '1';
-
-  // 如果 URL 中没有 mid 参数（如 https://mp.weixin.qq.com/s/xxxxx 格式），
-  // 则使用 URL 的 path 作为唯一标识
-  let uniqueId: string;
-  if (mid) {
-    uniqueId = `${Number(mid)}_${Number(idx) || 1}`;
-  } else {
-    // 使用 URL path 的最后一部分作为唯一标识
-    // 例如：https://mp.weixin.qq.com/s/szR_E-1Nk_6sSDsu7ygqkQ -> szR_E-1Nk_6sSDsu7ygqkQ
-    const pathParts = parsed.pathname.split('/');
-    uniqueId = pathParts[pathParts.length - 1] || parsed.pathname;
-  }
-
-  return {
-    fakeid,
-    mid: mid ? Number(mid) : 0,
-    idx: Number(idx) || 1,
-    uniqueId,
-  };
-}
-
-function createRow(url: string): SingleArticleRow {
-  const { fakeid, mid, idx, uniqueId } = parseUrlParams(url);
-  const timestamp = dayjs().unix();
-  const aid = uniqueId;
-  // 使用 fakeid:aid 作为稳定 ID，与后端返回格式一致
-  const id = `${fakeid}:${aid}`;
-  return {
-    id,
-    fakeid,
-    link: url,
-    title: '未命名文章',
-    author_name: '--',
-    digest: '',
-    create_time: timestamp,
-    update_time: timestamp,
-    appmsgid: mid,
-    itemidx: idx,
-    aid,
-    contentDownload: false,
-    commentDownload: false,
-    accountName: null,
-    _status: '',
-    is_deleted: false,
-    is_hot: true,
-  };
-}
-
 async function addArticle() {
+  if (addBtnLoading.value) return;
+  const url = inputUrl.value.trim();
+  if (!url) {
+    toast.error('添加失败', '链接不能为空');
+    return;
+  }
+  addBtnLoading.value = true;
   try {
-    const normalized = normalizeUrl(inputUrl.value);
-    // 检查当前页和本地新增是否已有该链接
-    if (globalRowData.value.some(row => row.link === normalized)) {
+    // 调用后端统一接口：解析URL、长链接转短链接、保存到数据库
+    const resp = await $fetch<{
+      success: boolean;
+      data?: {
+        id: string;
+        fakeid: string;
+        aid: string;
+        link: string;
+        title: string;
+        author_name: string;
+        digest: string;
+        cover: string;
+        create_time: number;
+        update_time: number;
+        itemidx: number;
+        is_long_url: boolean;
+      };
+      error?: string;
+    }>('/api/query/article/prepare', {
+      method: 'POST',
+      body: { url },
+    });
+
+    if (!resp.success || !resp.data) {
+      toast.error('添加失败', resp.error || '无法处理此链接');
+      return;
+    }
+
+    const d = resp.data;
+
+    // 检查是否已存在
+    if (globalRowData.value.some(row => row.link === d.link)) {
       toast.info('提示', '该链接已存在列表中');
       return;
     }
-    const row = createRow(normalized);
+
+    const row: SingleArticleRow = {
+      id: d.id,
+      fakeid: d.fakeid,
+      link: d.link,
+      title: d.title,
+      author_name: d.author_name,
+      digest: d.digest,
+      cover: d.cover || undefined,
+      create_time: d.create_time,
+      update_time: d.update_time,
+      appmsgid: 0,
+      itemidx: d.itemidx,
+      aid: d.aid,
+      contentDownload: false,
+      commentDownload: false,
+      accountName: null,
+      _status: '',
+      is_deleted: false,
+      is_hot: true,
+    };
+
+    // 保存到前端 IndexedDB
+    await db.article.put(buildVirtualArticle(row), row.id);
     globalRowData.value = [row, ...globalRowData.value];
-    // 不在下载前保存到后端，下载成功后再保存
     refreshGrid();
     inputUrl.value = '';
     await downloadRows([row], { silent: true });
   } catch (error: any) {
     toast.error('添加失败', error?.message || '链接格式不正确');
+  } finally {
+    addBtnLoading.value = false;
   }
 }
 
@@ -469,34 +432,6 @@ function buildVirtualArticle(row: SingleArticleRow): AppMsgExWithFakeID {
     update_time: row.update_time,
     _single: true,
   };
-}
-
-async function upsertArticleStub(row: SingleArticleRow) {
-  // 先保存到前端 IndexedDB
-  const frontendResult = db.article.put(buildVirtualArticle(row), `${row.fakeid}:${row.aid}`);
-
-  // 同时保存到后端 SQLite 数据库
-  try {
-    await $fetch('/api/query/article/save', {
-      method: 'POST',
-      body: {
-        fakeid: row.fakeid,
-        aid: row.aid,
-        title: row.title,
-        link: row.link,
-        author_name: row.author_name,
-        digest: row.digest,
-        cover: row.cover,
-        create_time: row.create_time,
-        update_time: row.update_time,
-        itemidx: row.itemidx,
-      },
-    });
-  } catch (error) {
-    console.error('Failed to save article to backend:', error);
-  }
-
-  return frontendResult;
 }
 
 /**
@@ -848,7 +783,9 @@ async function removeRows() {
       <header class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between px-3 py-3">
         <div class="flex flex-1 gap-3">
           <UInput v-model="inputUrl" placeholder="请输入公众号文章链接" class="flex-1" @keyup.enter="addArticle" />
-          <UButton color="blue" @click="addArticle">添加</UButton>
+          <UButton color="blue" :loading="addBtnLoading" :disabled="addBtnLoading" @click="addArticle">
+            {{ addBtnLoading ? '解析中...' : '添加' }}
+          </UButton>
         </div>
         <div class="flex items-center gap-3">
           <!-- 分页控件 -->
