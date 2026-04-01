@@ -12,6 +12,23 @@ const { logs, running, enabled, checking, nextRunTime, toggleScheduler, manualCh
 // 被监控的公众号列表
 const monitoredAccounts = ref<MpAccount[]>([]);
 
+// 按分类分组
+const groupedAccounts = computed(() => {
+  const groups: Record<string, MpAccount[]> = {};
+  for (const acc of monitoredAccounts.value) {
+    const cat = acc.category || '未分类';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(acc);
+  }
+  // 未分类排最后
+  const entries = Object.entries(groups).sort(([a], [b]) => {
+    if (a === '未分类') return 1;
+    if (b === '未分类') return -1;
+    return a.localeCompare(b, 'zh-CN');
+  });
+  return entries;
+});
+
 async function loadMonitoredAccounts() {
   const all = await getAllInfo();
   monitoredAccounts.value = all.filter(acc => acc.is_monitored);
@@ -124,28 +141,35 @@ function hasError(log: any): boolean {
           </p>
         </div>
 
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          <div
-            v-for="account in monitoredAccounts"
-            :key="account.fakeid"
-            class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700"
-          >
-            <img
-              v-if="account.round_head_img"
-              :src="account.round_head_img"
-              alt=""
-              class="w-10 h-10 rounded-full object-cover border border-gray-200"
-            />
-            <div v-else class="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
-              <UIcon name="i-lucide:user" class="size-5 text-gray-400" />
+        <div v-else class="space-y-4">
+          <div v-for="[category, accounts] in groupedAccounts" :key="category">
+            <div class="flex items-center gap-2 mb-2">
+              <UIcon name="i-lucide:folder" class="size-4 text-gray-400" />
+              <span class="text-sm font-medium text-gray-600 dark:text-gray-300">{{ category }}</span>
+              <UBadge color="gray" variant="subtle" size="xs">{{ accounts.length }}</UBadge>
             </div>
-            <div class="flex-1 min-w-0">
-              <p class="font-medium truncate">{{ account.nickname }}</p>
-              <p v-if="account.category" class="text-xs text-gray-400">
-                {{ account.category }}
-              </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div
+                v-for="account in accounts"
+                :key="account.fakeid"
+                class="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700"
+              >
+                <img
+                  v-if="account.round_head_img"
+                  :src="account.round_head_img"
+                  alt=""
+                  class="w-10 h-10 rounded-full object-cover border border-gray-200"
+                />
+                <div v-else class="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                  <UIcon name="i-lucide:user" class="size-5 text-gray-400" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="font-medium truncate">{{ account.nickname }}</p>
+                  <p class="text-xs text-gray-400">{{ account.category || '未分类' }}</p>
+                </div>
+                <UBadge color="green" variant="subtle" size="xs">监控中</UBadge>
+              </div>
             </div>
-            <UBadge color="green" variant="subtle" size="xs">监控中</UBadge>
           </div>
         </div>
       </UCard>
