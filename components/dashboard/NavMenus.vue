@@ -12,6 +12,7 @@ const items = ref<NavItem[]>([
   { name: '文章下载', icon: 'i-lucide:file-down', href: '/dashboard/article' },
   { name: '单篇文章下载', icon: 'i-lucide:file-text', href: '/dashboard/single' },
   { name: '合集下载', icon: 'i-lucide:library-big', href: '/dashboard/album' },
+  { name: '爆文导入', icon: 'i-lucide:trending-up', href: '/dashboard/hot-import' },
   { name: '定时监控', icon: 'i-lucide:clock', href: '/dashboard/monitor' },
   { name: '分类管理', icon: 'i-lucide:folder-tree', href: '/dashboard/categories' },
   { name: '公共代理', icon: 'i-lucide:globe', href: '/dashboard/proxy' },

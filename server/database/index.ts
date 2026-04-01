@@ -266,6 +266,26 @@ function runMigrations(): void {
       `);
     }
 
+    // 创建 import_records 表（爆文导入记录）
+    const importRecordsTable = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='import_records'")
+      .get();
+    if (!importRecordsTable) {
+      console.log('[Migration] Creating import_records table');
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS import_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          file_name TEXT NOT NULL,
+          total INTEGER DEFAULT 0,
+          imported INTEGER DEFAULT 0,
+          skipped INTEGER DEFAULT 0,
+          failed INTEGER DEFAULT 0,
+          details TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    }
+
     // 检查 article_html 表的字段
     const htmlTableInfo = db.pragma('table_info(article_html)') as Array<{ name: string }>;
     const htmlColumns = htmlTableInfo.map(col => col.name);
