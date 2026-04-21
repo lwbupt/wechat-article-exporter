@@ -24,10 +24,17 @@ const articles = ref<ArticleOption[]>([]);
 const articleId = ref<number | null>(null);
 const savedImages = ref<SavedImage[]>([]);
 const previewContent = ref('');
+const hasImages = ref(false);
 
 // 一键配图
 const autoImaging = ref(false);
 const autoImageResult = ref<{ imageCount: number; keywords: string[] } | null>(null);
+
+// 编辑状态
+const editing = ref(false);
+const editContent = ref('');
+const reverting = ref(false);
+const saving = ref(false);
 
 // 配图配置
 const imageConfig = ref({ mode: 'search', count: 2, source: 'free_search' });
@@ -65,6 +72,7 @@ async function loadSavedImages() {
     });
     if (resp.success && resp.data) {
       savedImages.value = resp.data;
+      hasImages.value = resp.data.length > 0;
     }
   } catch {
     // 静默
@@ -77,6 +85,7 @@ async function loadArticleContent() {
     const resp = await $fetch<{ success: boolean; data?: any }>(`/api/query/content/generated-article/${articleId.value}`);
     if (resp.success && resp.data) {
       previewContent.value = resp.data.content_with_images || resp.data.content || '';
+      hasImages.value = !!resp.data.content_with_images;
     }
   } catch {
     // 静默
@@ -114,6 +123,7 @@ async function autoImage() {
 
   autoImaging.value = true;
   autoImageResult.value = null;
+  editing.value = false;
   try {
     const resp = await $fetch<{
       success: boolean;
@@ -127,6 +137,7 @@ async function autoImage() {
     if (resp.success && resp.data) {
       autoImageResult.value = { imageCount: resp.data.imageCount, keywords: resp.data.keywords || [] };
       previewContent.value = resp.data.contentWithImages;
+      hasImages.value = true;
       toast.success('配图完成', `已自动添加 ${resp.data.imageCount} 张配图`);
       await loadSavedImages();
     } else {
@@ -139,8 +150,68 @@ async function autoImage() {
   }
 }
 
+async function revertImages() {
+  if (!articleId.value) return;
+  reverting.value = true;
+  try {
+    const resp = await $fetch<{ success: boolean; data?: { content: string }; error?: string }>(
+      '/api/query/content/revert-images',
+      { method: 'POST', body: { articleId: articleId.value } },
+    );
+    if (resp.success) {
+      previewContent.value = resp.data?.content || '';
+      hasImages.value = false;
+      savedImages.value = [];
+      autoImageResult.value = null;
+      editing.value = false;
+      toast.success('已回退', '配图已清除，恢复为原文');
+    } else {
+      toast.error('回退失败', resp.error || '未知错误');
+    }
+  } catch (err: any) {
+    toast.error('回退失败', err?.message || '请求失败');
+  } finally {
+    reverting.value = false;
+  }
+}
+
+function startEdit() {
+  editContent.value = previewContent.value;
+  editing.value = true;
+}
+
+function cancelEdit() {
+  editing.value = false;
+}
+
+async function saveEdit() {
+  if (!articleId.value) return;
+  saving.value = true;
+  try {
+    const resp = await $fetch<{ success: boolean; error?: string }>(
+      '/api/query/content/update-article-content',
+      {
+        method: 'PUT',
+        body: { articleId: articleId.value, contentWithImages: editContent.value },
+      },
+    );
+    if (resp.success) {
+      previewContent.value = editContent.value;
+      editing.value = false;
+      toast.success('保存成功', '内容已更新');
+    } else {
+      toast.error('保存失败', resp.error || '未知错误');
+    }
+  } catch (err: any) {
+    toast.error('保存失败', err?.message || '请求失败');
+  } finally {
+    saving.value = false;
+  }
+}
+
 watch(articleId, () => {
   autoImageResult.value = null;
+  editing.value = false;
   loadSavedImages();
   loadArticleContent();
   loadImageConfig();
@@ -176,18 +247,42 @@ onMounted(async () => {
         <span v-if="selectedArticle?.category" class="text-gray-400">（{{ selectedArticle.category }}）</span>
       </div>
 
-      <!-- 一键配图按钮 -->
-      <UButton
-        icon="i-lucide:wand-sparkles"
-        color="blue"
-        size="md"
-        block
-        :loading="autoImaging"
-        :disabled="autoImaging || imageConfig.mode === 'none'"
-        @click="autoImage"
-      >
-        {{ autoImaging ? '自动配图中（AI提取搜索词 → 搜图 → 智能插入）...' : '一键自动配图' }}
-      </UButton>
+      <!-- 操作按钮 -->
+      <div class="flex items-center gap-2">
+        <UButton
+          icon="i-lucide:wand-sparkles"
+          color="blue"
+          size="md"
+          class="flex-1"
+          :loading="autoImaging"
+          :disabled="autoImaging || imageConfig.mode === 'none'"
+          @click="autoImage"
+        >
+          {{ autoImaging ? '自动配图中...' : hasImages ? '重新配图' : '一键自动配图' }}
+        </UButton>
+        <UButton
+          v-if="hasImages"
+          icon="i-lucide:undo-2"
+          color="red"
+          variant="outline"
+          size="md"
+          :loading="reverting"
+          :disabled="reverting || editing"
+          @click="revertImages"
+        >
+          回退原文
+        </UButton>
+        <UButton
+          v-if="hasImages && !editing"
+          icon="i-lucide:pencil"
+          color="gray"
+          variant="outline"
+          size="md"
+          @click="startEdit"
+        >
+          编辑
+        </UButton>
+      </div>
 
       <!-- 配图结果 -->
       <div v-if="autoImageResult" class="rounded-md border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 p-3">
@@ -224,11 +319,24 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- 配图后 Markdown 预览 -->
-    <div v-if="previewContent && !autoImaging" class="flex-1 min-h-0">
+    <!-- 编辑模式 -->
+    <div v-if="editing" class="flex-1 min-h-0 flex flex-col gap-2">
+      <textarea
+        v-model="editContent"
+        class="flex-1 rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-gray-800 px-3 py-2 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+        placeholder="编辑 Markdown 内容..."
+      />
+      <div class="flex items-center gap-2">
+        <UButton color="blue" :loading="saving" :disabled="saving" @click="saveEdit">保存修改</UButton>
+        <UButton color="white" @click="cancelEdit">取消</UButton>
+      </div>
+    </div>
+
+    <!-- 配图后 Markdown 预览（非编辑模式） -->
+    <div v-else-if="previewContent && !autoImaging" class="flex-1 min-h-0">
       <details open class="h-full rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
         <summary class="px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-400 cursor-pointer bg-gray-50 dark:bg-gray-800 shrink-0">
-          配图后 Markdown 预览
+          {{ hasImages ? '配图后 Markdown 预览' : '原文 Markdown 预览' }}
         </summary>
         <pre class="flex-1 overflow-auto px-3 py-2 text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-[300px]">{{ previewContent }}</pre>
       </details>

@@ -10,13 +10,20 @@ import { AccountCookie, cookieStore } from './CookieStore';
 import { getAllMpCookies } from '../kv/cookie';
 import { USER_AGENT } from '~/config';
 
-let isCheckRunning = false;
-let isSchedulerEnabled = true;
+// 使用 globalThis 防止 HMR 热更新时状态重复初始化
+const _g = globalThis as any;
+if (!_g.__monitorState) {
+  _g.__monitorState = {
+    isCheckRunning: false,
+    isSchedulerEnabled: true,
+    lastExecutedHour: -1,
+    schedulerTimer: null as ReturnType<typeof setInterval> | null,
+  };
+}
 
-const CHECK_ARTICLE_COUNT = 2;
+const state = _g.__monitorState;
+
 const SCHEDULED_HOURS = [0, 4, 8, 12, 16, 20];
-let lastExecutedHour = -1;
-let schedulerTimer: ReturnType<typeof setInterval> | null = null;
 
 function getMonitoredAccounts() {
   return db.prepare('SELECT * FROM mp_accounts WHERE is_monitored = 1').all() as any[];
@@ -52,7 +59,7 @@ async function tryFetchArticles(
     sub: 'list',
     search_field: 'null',
     begin: '0',
-    count: String(CHECK_ARTICLE_COUNT),
+    count: '5',
     query: '',
     fakeid: fakeid,
     type: '101_1',
@@ -111,9 +118,10 @@ async function checkAccount(
   };
 
   try {
+    // 记录当前已有的所有 aid（用于判断新增）
     const existingRows = db
-      .prepare('SELECT aid FROM articles WHERE fakeid = ? ORDER BY create_time DESC LIMIT ?')
-      .all(account.fakeid, CHECK_ARTICLE_COUNT) as { aid: string }[];
+      .prepare('SELECT aid FROM articles WHERE fakeid = ?')
+      .all(account.fakeid) as { aid: string }[];
     const existingAids = new Set(existingRows.map(r => r.aid));
 
     // 逐个尝试凭证，直到找到一个有效的
@@ -177,7 +185,7 @@ async function checkAccount(
 }
 
 export async function runMonitorCheck() {
-  if (isCheckRunning) {
+  if (state.isCheckRunning) {
     console.log('[Monitor] 上一轮检查尚未完成，跳过');
     return;
   }
@@ -204,7 +212,7 @@ export async function runMonitorCheck() {
     return;
   }
 
-  isCheckRunning = true;
+  state.isCheckRunning = true;
   console.log(`[Monitor] 开始检查 ${accounts.length} 个公众号（${credentials.length} 个凭证）...`);
 
   try {
@@ -216,28 +224,28 @@ export async function runMonitorCheck() {
     }
     console.log('[Monitor] 本轮检查完成');
   } finally {
-    isCheckRunning = false;
+    state.isCheckRunning = false;
   }
 }
 
 export function startScheduler() {
-  if (schedulerTimer) return;
-  isSchedulerEnabled = true;
+  if (state.schedulerTimer) return;
+  state.isSchedulerEnabled = true;
 
-  schedulerTimer = setInterval(() => {
+  state.schedulerTimer = setInterval(() => {
     const now = new Date();
     const bjHour = now.getUTCHours() + 8;
     const hour = bjHour >= 24 ? bjHour - 24 : bjHour;
     const minute = now.getUTCMinutes();
 
-    if (minute <= 1 && SCHEDULED_HOURS.includes(hour) && lastExecutedHour !== hour) {
-      lastExecutedHour = hour;
+    if (minute <= 1 && SCHEDULED_HOURS.includes(hour) && state.lastExecutedHour !== hour) {
+      state.lastExecutedHour = hour;
       console.log(`[Monitor] 定时触发: ${new Date().toLocaleString('zh-CN')}`);
       runMonitorCheck();
     }
 
     if (minute > 2) {
-      lastExecutedHour = -1;
+      state.lastExecutedHour = -1;
     }
   }, 60_000);
 
@@ -245,18 +253,18 @@ export function startScheduler() {
 }
 
 export function stopScheduler() {
-  if (schedulerTimer) {
-    clearInterval(schedulerTimer);
-    schedulerTimer = null;
+  if (state.schedulerTimer) {
+    clearInterval(state.schedulerTimer);
+    state.schedulerTimer = null;
   }
-  isSchedulerEnabled = false;
+  state.isSchedulerEnabled = false;
   console.log('[Monitor] 调度器已停止');
 }
 
 export function getIsCheckRunning() {
-  return isCheckRunning;
+  return state.isCheckRunning;
 }
 
 export function getIsSchedulerEnabled() {
-  return isSchedulerEnabled;
+  return state.isSchedulerEnabled;
 }

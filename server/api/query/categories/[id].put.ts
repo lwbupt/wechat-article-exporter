@@ -12,13 +12,13 @@ export default defineEventHandler(async event => {
     }
 
     const body = await readBody(event);
-    const { name, parentId, sortOrder } = body;
+    const { name, parentId, sortOrder, imageMode, imageCount, imageSource } = body;
 
     if (!name || !name.trim()) {
       return { success: false, error: '分类名称不能为空' };
     }
 
-    updateCategory(id, name.trim(), parentId ?? null, sortOrder ?? undefined);
+    updateCategory(id, name.trim(), parentId ?? null, sortOrder ?? undefined, imageMode, imageCount, imageSource);
 
     return { success: true, message: '分类更新成功' };
   } catch (error) {

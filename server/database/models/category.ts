@@ -79,7 +79,15 @@ export function insertCategory(name: string, parentId: number | null): void {
 /**
  * 更新分类
  */
-export function updateCategory(id: number, name: string, parentId: number | null, sortOrder?: number): void {
+export function updateCategory(
+  id: number,
+  name: string,
+  parentId: number | null,
+  sortOrder?: number,
+  imageMode?: string,
+  imageCount?: number,
+  imageSource?: string,
+): void {
   const updates: string[] = [];
   const values: any[] = [];
 
@@ -94,6 +102,21 @@ export function updateCategory(id: number, name: string, parentId: number | null
   if (sortOrder !== undefined) {
     updates.push('sort_order = ?');
     values.push(sortOrder);
+  }
+
+  if (imageMode !== undefined) {
+    updates.push('image_mode = ?');
+    values.push(imageMode);
+  }
+
+  if (imageCount !== undefined) {
+    updates.push('image_count = ?');
+    values.push(imageCount);
+  }
+
+  if (imageSource !== undefined) {
+    updates.push('image_source = ?');
+    values.push(imageSource);
   }
 
   values.push(id);

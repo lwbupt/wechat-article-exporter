@@ -9,6 +9,7 @@ import { linkArticleResources, upsertAsset } from '~/server/database/models/asse
 import { insertCommentReplies, insertComments } from '~/server/database/models/comment';
 import { upsertArticleHtml } from '~/server/database/models/html';
 import { upsertArticleMetadata } from '~/server/database/models/metadata';
+import db from '~/server/database/index';
 
 /**
  * 同步公众号信息
@@ -91,6 +92,35 @@ export function syncArticles(fakeid: string, articles: any[]): void {
 
     upsertArticles(formattedArticles);
     console.log(`Synced ${formattedArticles.length} articles for account ${fakeid}`);
+
+    // 去重：同名文章只保留 datetime 最新的一条，删除旧版本
+    const deleted = db.prepare(`
+      DELETE FROM articles
+      WHERE rowid IN (
+        SELECT a.rowid FROM articles a
+        INNER JOIN (
+          SELECT title, fakeid, MAX(datetime) as max_dt
+          FROM articles
+          WHERE fakeid = ? AND is_deleted = 0 AND title IS NOT NULL AND title != ''
+          GROUP BY title
+          HAVING COUNT(*) > 1
+        ) dup ON dup.title = a.title AND dup.fakeid = a.fakeid
+        WHERE a.fakeid = ? AND a.datetime < dup.max_dt AND a.is_deleted = 0
+      )
+    `).run(fakeid, fakeid);
+    if (deleted.changes > 0) {
+      console.log(`[DB Sync] Removed ${deleted.changes} duplicate articles for ${fakeid}`);
+    }
+
+    // 回填缺失的 author_name：用同一公众号下已知作者名填充
+    db.prepare(`
+      UPDATE articles SET author_name = (
+        SELECT author_name FROM articles a2
+        WHERE a2.fakeid = articles.fakeid AND a2.author_name IS NOT NULL AND a2.author_name != ''
+        LIMIT 1
+      )
+      WHERE fakeid = ? AND (author_name IS NULL OR author_name = '')
+    `).run(fakeid);
   } catch (error) {
     console.error('Failed to sync articles:', error);
   }

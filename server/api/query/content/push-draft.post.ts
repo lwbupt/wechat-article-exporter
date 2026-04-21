@@ -101,6 +101,29 @@ export default defineEventHandler(async event => {
       ? article.content.substring(0, 120).replace(/[#*\n]/g, ' ').trim()
       : '';
 
+    // 幂等性检查：查草稿箱是否已存在相同标题的文章
+    try {
+      const listUrl = `https://api.weixin.qq.com/cgi-bin/draft/batchget?access_token=${token}`;
+      const listResp = await fetch(listUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ offset: 0, count: 20 }),
+      });
+      const listData = await listResp.json() as any;
+      if (listData.item) {
+        const duplicate = listData.item.find((item: any) =>
+          item.content?.news_item?.some((n: any) => n.title === article.title)
+        );
+        if (duplicate) {
+          // 已存在相同标题的草稿，视为推送成功
+          db.prepare("UPDATE generated_articles SET publish_status = 'pushed' WHERE id = ?").run(articleId);
+          return { success: true, data: { mediaId: duplicate.media_id, skipped: true } };
+        }
+      }
+    } catch {
+      // 查询失败不阻塞，继续推送
+    }
+
     // 调用草稿箱 API
     const draftBody: Record<string, any> = {
       articles: [

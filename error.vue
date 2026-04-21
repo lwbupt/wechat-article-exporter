@@ -29,6 +29,12 @@
             Error Code: <span class="font-mono">{{ errorCode }}</span>
           </p>
         </div>
+
+        <div v-if="errorDetails" class="mt-6 max-w-2xl w-full text-left bg-red-50 border border-red-200 rounded-lg p-4 text-sm">
+          <p v-if="errorDetails.statusCode" class="font-semibold text-red-700">Status: {{ errorDetails.statusCode }} {{ errorDetails.statusMessage }}</p>
+          <p v-if="errorDetails.message" class="mt-2 text-red-600 break-all">{{ errorDetails.message }}</p>
+          <pre v-if="errorDetails.stack" class="mt-3 text-xs text-gray-600 whitespace-pre-wrap overflow-auto max-h-48 bg-white rounded p-2 border">{{ errorDetails.stack }}</pre>
+        </div>
         <a
           class="mt-8 inline-flex items-center justify-center rounded-lg bg-[#0A0A0A] px-5 py-3 text-base font-medium text-white shadow-md transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-[#0A0A0A] focus:ring-offset-2 focus:ring-offset-background-light"
           href="/"
@@ -50,6 +56,18 @@ useHead({
 const route = useRoute();
 const router = useRouter();
 const errorCode = computed(() => route.query.error);
+
+const nuxtError = useError();
+const errorDetails = computed(() => {
+  const err = nuxtError.value;
+  if (!err) return null;
+  return {
+    statusCode: (err as any).statusCode || '',
+    statusMessage: (err as any).statusMessage || '',
+    message: err.message || '',
+    stack: (err.stack || '').split('\n').slice(0, 8).join('\n'),
+  };
+});
 </script>
 
 <style scoped>

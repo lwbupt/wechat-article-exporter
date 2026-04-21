@@ -27,5 +27,19 @@ samples/**/output
 .env.*
 !.env.example
 
+# Database & user data (privacy)
+data/wechat.db
+data/wechat.db-shm
+data/wechat.db-wal
+data/excel/
+data/kv/
+
+# IDE / AI tool configs (privacy)
+.agents/
+.windsurf/
+.claude/
+skills-lock.json
+历史要求.MD
+
 # wrangler
 .wrangler

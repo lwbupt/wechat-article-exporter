@@ -8,7 +8,7 @@ export const isDev = process.env.NODE_ENV === 'development';
 /**
  * 网站标题
  */
-export const websiteName = '公众号文章导出';
+export const websiteName = '公众号内容工厂';
 
 /**
  * 文章列表每页大小，20为最大有效值

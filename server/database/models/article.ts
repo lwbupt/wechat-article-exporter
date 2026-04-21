@@ -50,7 +50,7 @@ export function upsertArticle(article: Article): void {
       digest = excluded.digest,
       content = excluded.content,
       cover = excluded.cover,
-      author_name = excluded.author_name,
+      author_name = COALESCE(excluded.author_name, articles.author_name),
       copyright_stat = excluded.copyright_stat,
       is_original = excluded.is_original,
       datetime = excluded.datetime,

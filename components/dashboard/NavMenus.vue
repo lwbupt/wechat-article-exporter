@@ -9,13 +9,13 @@ interface NavItem {
 
 const items = ref<NavItem[]>([
   { name: '公众号管理', icon: 'i-lucide:users', href: '/dashboard/account' },
+  { name: '公众号运营', icon: 'i-lucide:bot', href: '/dashboard/managed-account' },
   { name: '文章下载', icon: 'i-lucide:file-down', href: '/dashboard/article' },
   { name: '单篇文章下载', icon: 'i-lucide:file-text', href: '/dashboard/single' },
   { name: '合集下载', icon: 'i-lucide:library-big', href: '/dashboard/album' },
-  { name: '爆文导入', icon: 'i-lucide:trending-up', href: '/dashboard/hot-import' },
+  { name: '内容沉淀', icon: 'i-lucide:trending-up', href: '/dashboard/hot-import' },
+  { name: '内容生成', icon: 'i-lucide:pen-line', href: '/dashboard/content-gen' },
   { name: '定时监控', icon: 'i-lucide:clock', href: '/dashboard/monitor' },
-  { name: '分类管理', icon: 'i-lucide:folder-tree', href: '/dashboard/categories' },
-  { name: '公共代理', icon: 'i-lucide:globe', href: '/dashboard/proxy' },
   { name: 'API', icon: 'i-lucide:cable', href: '/dashboard/api' },
   { name: '设置', icon: 'i-lucide:settings', href: '/dashboard/settings' },
   { name: '技术支持 & 赞助', icon: 'i-lucide:heart-handshake', href: '/dashboard/support' },
