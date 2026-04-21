@@ -17,6 +17,7 @@ RUN yarn install --frozen-lockfile && yarn cache clean
 # 复制源代码并构建
 COPY . .
 ENV NODE_ENV=production
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN yarn build
 
 # ============================================
