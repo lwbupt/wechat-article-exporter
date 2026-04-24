@@ -40,6 +40,7 @@ export interface DownloaderStatus {
   completed: string[];
   failed: string[];
   deleted: string[];
+  failedReasons: Map<string, string>;
   proxy: Map<string, ProxyStatus>;
 }
 

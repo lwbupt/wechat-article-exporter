@@ -12,6 +12,8 @@ services:
     volumes:
       # 所有数据统一挂载：数据库 + KV + 日志
       - ./data:/app/data
+      # 时区同步（确保定时任务按北京时间执行）
+      - /etc/localtime:/etc/localtime:ro
     # 从 .env 文件读取配置，不在此处硬编码
     env_file:
       - .env
@@ -20,4 +22,6 @@ services:
       - NODE_ENV=production
       # Linux 容器必须监听所有网卡
       - HOST=0.0.0.0
+      # 时区设置（定时任务依赖此时区）
+      - TZ=Asia/Shanghai
     restart: unless-stopped

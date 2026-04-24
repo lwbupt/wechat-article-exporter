@@ -23,6 +23,7 @@ export class BaseDownloader {
   protected readonly completed: Set<string>; // 文章抓取成功列表
   protected readonly failed: Set<string>; // 文章抓取异常列表
   protected readonly deleted: Set<string>; // 文章已删除列表
+  protected readonly failedReasons: Map<string, string>; // 失败原因
 
   protected readonly options: Required<DownloadOptions>;
   protected isRunning: boolean;
@@ -44,6 +45,7 @@ export class BaseDownloader {
     this.completed = new Set();
     this.failed = new Set();
     this.deleted = new Set();
+    this.failedReasons = new Map();
     this.isRunning = false;
     this.abortControllers = new Map();
     this.events = new Map();
@@ -114,6 +116,7 @@ export class BaseDownloader {
       completed: Array.from(this.completed),
       failed: Array.from(this.failed),
       deleted: Array.from(this.deleted),
+      failedReasons: this.failedReasons,
       proxy: this.proxyManager.getProxyStatus(),
     };
   }
@@ -130,7 +133,9 @@ export class BaseDownloader {
   // 代理下载失败时的处理逻辑
   protected async handleDownloadFailure(proxy: string, url: string, attempt: number, error: any): Promise<void> {
     this.proxyManager.recordFailure(proxy);
-    console.warn(`Attempt ${attempt + 1} failed for ${url} using ${proxy}:`, error);
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn(`Attempt ${attempt + 1} failed for ${url} using ${proxy}:`, reason);
+    this.failedReasons.set(url, reason);
 
     if (attempt < this.options.maxRetries - 1) {
       const delay = Math.pow(2, attempt);

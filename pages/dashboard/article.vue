@@ -346,12 +346,14 @@ watch(selectedAccount, newVal => {
 
 // 组件挂载时刷新公众号列表，确保显示最新的文章数量
 onMounted(async () => {
-  await accountSelectorRef.value?.refreshAccounts();
+  await nextTick();
+  accountSelectorRef.value?.refreshAccounts?.();
 });
 
 // 组件激活时刷新公众号列表（用于从其他页面切换回来时更新数据）
 onActivated(async () => {
-  await accountSelectorRef.value?.refreshAccounts();
+  await nextTick();
+  accountSelectorRef.value?.refreshAccounts?.();
 });
 
 async function switchTableData(fakeid: string) {

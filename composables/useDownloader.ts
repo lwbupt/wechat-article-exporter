@@ -71,9 +71,12 @@ export default (options: Partial<DownloadArticleOptions> = {}) => {
       });
       downloader.on('download:finish', (seconds: number, status: DownloaderStatus) => {
         console.debug('耗时:', formatElapsedTime(seconds));
+        const reasons = status.failed.length > 0
+          ? '\n失败原因: ' + Array.from(status.failedReasons.entries()).map(([url, reason]) => reason).join('; ')
+          : '';
         toast.success(
           '【文章内容】抓取完成',
-          `本次抓取耗时 ${formatElapsedTime(seconds)}, 成功:${status.completed.length}, 失败:${status.failed.length}, 检测到已被删除:${status.deleted.length}`
+          `本次抓取耗时 ${formatElapsedTime(seconds)}, 成功:${status.completed.length}, 失败:${status.failed.length}, 检测到已被删除:${status.deleted.length}${reasons}`
         );
       });
       downloader.on('download:stop', () => {
@@ -130,9 +133,12 @@ export default (options: Partial<DownloadArticleOptions> = {}) => {
       });
       downloader.on('download:finish', (seconds: number, status: DownloaderStatus) => {
         console.debug('耗时:', formatElapsedTime(seconds));
+        const reasons = status.failed.length > 0
+          ? '\n失败原因: ' + Array.from(status.failedReasons.entries()).map(([url, reason]) => reason).join('; ')
+          : '';
         toast.success(
           '【阅读量】抓取完成',
-          `本次抓取耗时 ${formatElapsedTime(seconds)}, 成功:${status.completed.length}, 失败:${status.failed.length}, 检测到已被删除:${status.deleted.length}`
+          `本次抓取耗时 ${formatElapsedTime(seconds)}, 成功:${status.completed.length}, 失败:${status.failed.length}, 检测到已被删除:${status.deleted.length}${reasons}`
         );
       });
 
@@ -174,9 +180,12 @@ export default (options: Partial<DownloadArticleOptions> = {}) => {
       });
       downloader.on('download:finish', (seconds: number, status: DownloaderStatus) => {
         console.debug('耗时:', formatElapsedTime(seconds));
+        const reasons = status.failed.length > 0
+          ? '\n失败原因: ' + Array.from(status.failedReasons.entries()).map(([url, reason]) => reason).join('; ')
+          : '';
         toast.success(
           '【留言内容】抓取完成',
-          `本次抓取耗时 ${formatElapsedTime(seconds)}, 成功:${status.completed.length}, 失败:${status.failed.length}`
+          `本次抓取耗时 ${formatElapsedTime(seconds)}, 成功:${status.completed.length}, 失败:${status.failed.length}${reasons}`
         );
       });
 
